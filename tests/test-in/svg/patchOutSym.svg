@@ -1,0 +1,47 @@
+<?xml version="1.0" ?>
+<svg:svg xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:svg="http://www.w3.org/2000/svg" width="370mm" height="500mm" viewBox="0 0 370 500" version="1.1" id="svg8" inkscape:version="1.0.1 (3bc2e813f5, 2020-09-07)" sodipodi:docname="svg/patchOutSym.svg">
+	
+  
+	<svg:defs id="defs2">
+		
+    
+		<inkscape:path-effect effect="mirror_symmetry" start_point="185.0,0" end_point="185.0,500" center_point="185.0,250.0" id="path-effect12" is_visible="true" lpeversion="1" mode="vertical" discard_orig_path="false" fuse_paths="false" oposite_fuse="false" split_items="false"/>
+		
+  
+	</svg:defs>
+	
+  
+	<sodipodi:namedview id="base" pagecolor="#ffffff" bordercolor="#666666" borderopacity="1.0" inkscape:pageopacity="0.0" inkscape:pageshadow="2" inkscape:zoom="0.49497475" inkscape:cx="287.61127" inkscape:cy="596.57487" inkscape:document-units="mm" inkscape:current-layer="layer1" inkscape:document-rotation="0" showgrid="false" inkscape:showpageshadow="false" guidetolerance="9.7" objecttolerance="9.7" inkscape:window-width="1436" inkscape:window-height="977" inkscape:window-x="160" inkscape:window-y="56" inkscape:window-maximized="0"/>
+	
+  
+	<svg:metadata id="metadata5">
+		
+    
+		<rdf:RDF>
+			
+      
+			<cc:Work rdf:about="">
+				
+        
+				<dc:format>image/svg+xml</dc:format>
+				
+        
+				<dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+				
+        
+				<dc:title/>
+				
+      
+			</cc:Work>
+			
+    
+		</rdf:RDF>
+		
+  
+	</svg:metadata>
+	
+
+	<svg:g>
+		<svg:path style="fill:none;stroke:Black;stroke-width:1.5;" d="" inkscape:path-effect="#path-effect12" inkscape:original-d="M 185.0,0 L 300,50 "/>
+	</svg:g>
+</svg:svg>

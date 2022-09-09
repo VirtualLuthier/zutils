@@ -1,0 +1,64 @@
+<?xml version="1.0" ?>
+<svg:svg xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:svg="http://www.w3.org/2000/svg" width="370mm" height="500mm" viewBox="0 0 370 500" version="1.1" id="svg8" inkscape:version="1.0.1 (3bc2e813f5, 2020-09-07)" sodipodi:docname="svg/patchOut1.svg">
+	
+  
+	<svg:defs id="defs2">
+		
+    
+		<inkscape:path-effect effect="mirror_symmetry" start_point="374.00072,-5.5788712e-09" end_point="374.00072,500" center_point="374.00072,250" id="path-effect37" is_visible="true" lpeversion="1" mode="vertical" discard_orig_path="false" fuse_paths="false" oposite_fuse="false" split_items="false"/>
+		
+    
+		<inkscape:path-effect effect="mirror_symmetry" start_point="374.95731,0.51615719" end_point="374.95731,500.8335" center_point="374.95731,250.67483" id="path-effect849" is_visible="true" lpeversion="1" mode="vertical" discard_orig_path="false" fuse_paths="false" oposite_fuse="false" split_items="false"/>
+		
+  
+	</svg:defs>
+	
+  
+	<sodipodi:namedview id="base" pagecolor="#ffffff" bordercolor="#666666" borderopacity="1.0" inkscape:pageopacity="0.0" inkscape:pageshadow="2" inkscape:zoom="0.12374369" inkscape:cx="618.83407" inkscape:cy="719.05261" inkscape:document-units="mm" inkscape:current-layer="layer1" inkscape:document-rotation="0" showgrid="false" objecttolerance="5.3" guidetolerance="8.6" showguides="true" inkscape:guide-bbox="true" inkscape:window-width="1436" inkscape:window-height="1033" inkscape:window-x="429" inkscape:window-y="25" inkscape:window-maximized="0" inkscape:showpageshadow="false" borderlayer="true" gridtolerance="1">
+		<sodipodi:guide position="185.0,-50" orientation="-1,0" inkscape:label="center" inkscape:locked="true"/>
+		<sodipodi:guide position="-50,403" orientation="0,1" inkscape:label="waist" inkscape:locked="true"/>
+	</sodipodi:namedview>
+	
+  
+	<svg:metadata id="metadata5">
+		
+    
+		<rdf:RDF>
+			
+      
+			<cc:Work rdf:about="">
+				
+        
+				<dc:format>image/svg+xml</dc:format>
+				
+        
+				<dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+				
+        
+				<dc:title/>
+				
+      
+			</cc:Work>
+			
+    
+		</rdf:RDF>
+		
+  
+	</svg:metadata>
+	
+  
+	<svg:g inkscape:label="Ebene 1" inkscape:groupmode="layer" id="layer1"/>
+	
+
+	<svg:g>
+		<svg:path style="fill:none;stroke:Black;stroke-width:1.5;" d="M 185.0,0 L 300,50 C 300,50 340,50 300,100 "/>
+	</svg:g>
+	<svg:g>
+		<svg:path style="fill:none;stroke:Black;stroke-width:1.5;" d="M 125.0,120.0 A 60.0 60.0 0.0 0 0 185.0,180.0 A 60.0 60.0 0.0 0 0 245.0,120.0 A 60.0 60.0 0.0 0 0 185.0,60.0 A 60.0 60.0 0.0 0 0 125.0,120.0  Z"/>
+	</svg:g>
+	<svg:g>
+		<svg:path style="fill:#efefef;fill-opacity:1;stroke:#020405;stroke-width:0.4" d="M 285.0,350.0 A 100.0 100.0 0.0 0 1 185.0,450.0 A 100.0 100.0 0.0 0 1 85.0,350.0 A 100.0 100.0 0.0 0 1 185.0,250.0 A 100.0 100.0 0.0 0 1 285.0,350.0 M 125.0,350.0 A 60.0 60.0 0.0 0 0 185.0,410.0 A 60.0 60.0 0.0 0 0 245.0,350.0 A 60.0 60.0 0.0 0 0 185.0,290.0 A 60.0 60.0 0.0 0 0 125.0,350.0 "/>
+		<svg:path/>
+		<svg:path style="fill:none;stroke:Black;stroke-width:1.5;" d="M 135.0,350.0 A 50.0 50.0 0.0 0 0 185.0,400.0 A 50.0 50.0 0.0 0 0 235.0,350.0 A 50.0 50.0 0.0 0 0 185.0,300.0 A 50.0 50.0 0.0 0 0 135.0,350.0  Z"/>
+	</svg:g>
+</svg:svg>

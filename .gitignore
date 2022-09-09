@@ -1,0 +1,17 @@
+*.scad
+*.dxf
+*.stl
+*.c
+*.pyd
+*.exp
+*.lib
+*.obj
+*.z3d
+*.xml
+*.qm
+*.ts
+*.3dmbak
+__pycache__/
+test-out/
+.vscode/
+test-in/rhino3d/det-bottle.3dm
