@@ -7,6 +7,8 @@ import unittest
 #import sys
 #sys.path.append('.')
 
+from context import zutils, testInFolder, testOutFolder
+
 
 from zutils.ZGeom import Point
 from zutils.SvgPatcherInkscape import SvgPatcherInkscape

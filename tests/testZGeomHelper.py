@@ -5,6 +5,9 @@ import unittest
 
 #sys.path.append('.')
 
+
+from context import zutils, testInFolder, testOutFolder
+
 from zutils.ZGeom import Point
 from zutils.ZGeomHelper import ZGeomHelper
 #from zutils.ZD3Body import ZCone, ZCylinder

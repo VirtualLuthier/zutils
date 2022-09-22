@@ -6,6 +6,9 @@
 
 import unittest
 
+
+from context import zutils, testInFolder, testOutFolder
+
 from zutils.ZUnits import ZUnits
 
 

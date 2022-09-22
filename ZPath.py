@@ -15,7 +15,7 @@ import math
 #from scipy.optimize import newton
 import xml.etree.ElementTree as ET
 
-from zutils.ZGeom import Point, Polygon, Line, Circle2, Ellipse2, ZGeomItem, Plane
+from zutils.ZGeom import Point, Polygon, Line, Circle2, Ellipse3, ZGeomItem, Plane
 from zutils.ZMatrix import Matrix, Affine
 #from zutils.shame import searchForEllipseCenter
 
@@ -62,10 +62,10 @@ class ZPathSegment:
 
 	def getParameterRange(self):
 		"""
-			Return an array of 2 values for my parameter range.
+			Return an array of 3 values for my parameter range, and difference
 			Overridden in subclass ZArcSegment
 		"""
-		return [0, 1]
+		return [0, 1, 1]
 
 
 	#def copy(self):
@@ -81,7 +81,7 @@ class ZPathSegment:
 
 	def transformedBy(self, affine):
 		"""
-			Return a copy of myself, that describe me transformed
+			Return a copy of myself, that describes me transformed
 		"""
 		val = self.copy()
 		val.transformBy(affine)
@@ -98,6 +98,36 @@ class ZPathSegment:
 		raise Exception('not implemented getInterPointsWithTangent() in class: ' + self.__class__.__name__)
 
 
+	def pointsAreNear(self, p1, p2):
+		"""
+			Tries to estimate, if the points are near, relative to my own size
+		"""
+		return self.distanceIsSmall(p1.distanceOf(p2))
+
+
+	def distanceIsSmall(self, distance):
+		"""
+			Tries to estimate, if the distance is nectectably small, relative to my own size
+		"""
+		len = self.m_start.distanceOf(self.m_stop)
+		return ZGeomItem.almostZero(distance / len)
+
+
+	def paramForPoint(self, point, complain=True):
+		"""
+			Return the parameter that fits to the given point (or math.nan, if point is not on me)
+		"""
+		arr = self.findNearestPoint(point)
+		dist = arr[3]
+		error = dist
+		if self.distanceIsSmall(error):
+			return arr[2]
+		if complain:
+			raise Exception(f'point does not lie on curve, error = {error}')
+		return math.nan
+
+
+
 	def findMinimalPoint(self, func):
 		"""
 			Find a point p on me, so that func(p) has a minimal value.
@@ -105,37 +135,38 @@ class ZPathSegment:
 			Returns a list: [segment, point, segParameter, value]
 		"""
 		#raise Exception('not implemented getInterPointsWithTangent() in class: ' + self.__class__.__name__)
-		(tStart, tStop) = self.getParameterRange()
-		diff = (tStop - tStart) / 100.0
-		t = tStart
+		(tStart, tStop, tDelta) = self.getParameterRange()
+		numSteps = 200
+		diff = tDelta / float(numSteps)
 		fMin = 1000000000
 		tMin = math.nan
-		#pMin = Point()
-		while t < tStop:
+
+		for step in range(numSteps):
+			t = tStart + step * diff
 			test = self.getInterPointAtParameter(t)
 			fTest = func(test)
 			if fTest < fMin:
 				fMin = fTest
-				#pMin = test
 				tMin = t
-			t += diff
-		# also test my stop point:
-		fTest = func(self.m_stop)
+
+		# also test my "stop" point:
+		fTest = func(self.getInterPointAtParameter(tStop))
 		if fTest < fMin:
 			fMin = fTest
-			#pMin = self.m_stop
-			tMin = 1
+			tMin = tStop
+
 		# finally use interval nesting:
-		low = max(0, tMin - diff)
-		upp = min(tMin + diff, 1)
+		low = max(tStart, tMin - diff)
+		upp = min(tMin + diff, tStop)
 		diff = upp - low
-		#print('start')
-		while diff > 0.0000000001:
+		pLow = self.getInterPointAtParameter(low)
+		fLow = func(pLow)
+		while abs(diff) > 1e-10:			#	0.0000000001:
 			pLow = self.getInterPointAtParameter(low)
 			pUpp = self.getInterPointAtParameter(upp)
 			fLow = func(pLow)
 			fUpp = func(pUpp)
-			diff = diff / 2.0
+			diff /= 2.0
 			if fLow < fUpp:
 				upp = low + diff
 			else:
@@ -258,13 +289,13 @@ class ZPathSegment:
 				segPoints.append(p1)
 				isInLine = False
 			else:
-				newCircle = ZPathSegment.isAcceptableTolerance(segPoints, currentCircle, tolerance)
+				newCircle = ZPathSegment.isAcceptableCncTolerance(segPoints, currentCircle, tolerance)
 				if newCircle is not None:
 					currentCircle = newCircle
 				else:
 					# we need a new segment, first finish the current
 					segPoints.pop()
-					ZPathSegment.addOneSegment(ret, segPoints, currentCircle)
+					ZPathSegment.addOneCncSegment(ret, segPoints, currentCircle)
 					last = segPoints.pop()			
 					segPoints = []
 					segPoints.append(last)
@@ -275,12 +306,15 @@ class ZPathSegment:
 			if isInLine:
 				ZPathSegment.addOneLine(ret, segPoints)
 			else:
-				self.addOneSegment(ret, segPoints, currentCircle)
+				self.addOneCncSegment(ret, segPoints, currentCircle)
 		return ret
 
 
 	@classmethod
-	def addOneSegment(cls, segList, segPoints, currentCircle):
+	def addOneCncSegment(cls, segList, segPoints, currentCircle):
+		"""
+			Adds a line or arc segment, that fits throuh the segPoints list to teh given segList
+		"""
 		if len(segPoints) < 2:
 			raise Exception('this should never happen: segPoints less than 2')
 		if len(segPoints) == 2:
@@ -303,7 +337,7 @@ class ZPathSegment:
 
 
 	@classmethod
-	def isAcceptableTolerance(cls, points, currentCircle, tolerance, step=1):
+	def isAcceptableCncTolerance(cls, points, currentCircle, tolerance, step=1):
 		minRad = 1000000000
 		maxRad = 0
 		center = currentCircle.m_center
@@ -319,7 +353,7 @@ class ZPathSegment:
 			# make a second try
 			midIdx = int(round(len(points) / 2.0))
 			newCircle = Circle2.circleFromThreePoints(points[0], points[midIdx], points[-1])
-			return cls.isAcceptableTolerance(points, newCircle, tolerance, step=2)
+			return cls.isAcceptableCncTolerance(points, newCircle, tolerance, step=2)
 		return None
 
 
@@ -818,7 +852,8 @@ class ZArcSegment(ZPathSegment):
 		- oldArc == None: for creation from an svg file (must be in x-y-plane)
 		- oldArc != None: for creation from another arc (then the first args may be dummies and are ignored)
 	"""
-	def __init__(self, rx, ry, axisAngle, p1, p2, largeArcFlag, sweepFlag, oldArc=None, center=None, normalVector=None, focusOffsetVector=None):
+	#def __init__(self, rx, ry, axisAngle, p1, p2, largeArcFlag, sweepFlag, oldArc=None, center=None, normalVector=None, focusOffsetVector=None):
+	def __init__(self, rx, ry, axisAngle, p1, p2, largeArcFlag, sweepFlag, ellipse3=None):	#, center=None, normalVector=None, focusOffsetVector=None):
 		super().__init__(p1, p2)
 		self.m_rx = rx
 		self.m_ry = ry
@@ -829,78 +864,76 @@ class ZArcSegment(ZPathSegment):
 		self.m_startAngle = math.nan
 		self.m_stopAngle = math.nan
 		self.m_deltaAngle = math.nan
-		self.m_focus1 = None
-		self.m_focus2 = None
-		self.m_normalVector = None
-		self.m_focusOffsetVector = None
-		self.m_mapUnitCircleToSelf = None
+		self.m_ellipse = ellipse3
+		#self.m_focus1 = None
+		#self.m_focus2 = None
+		#self.m_normalVector = None
+		#self.m_focusOffsetVector = None
+		#self.m_mapUnitCircleToSelf = None
 
-		if oldArc is None:
-			self.m_normalVector = Point(0, 0, 1)	# we are in x-y-plane
-			self.adaptSvgValues()
-		else:
-			self.adaptValuesFromOtherArc(oldArc)
-		self.selfTest()
+		if ellipse3 is None:
+			#self.m_normalVector = Point(0, 0, 1)	# we are in x-y-plane
+			self.adaptFromSvgValues()
+		#else:
+			#self.adaptValuesFromOtherArc(oldArc)
+		self.adaptFromEllipse()
+		#self.selfTest()
+
+
+	def containsPoint(self, point):
+		param = self.paramForPoint(point, complain=False)
+		return param is not None
 
 
 	def getParameterRange(self):
 		"""
-			Return an array of 2 values for my parameter range.
+			Return an array of 3 values for my parameter range and delta
 			Overrides same method in ZPathSegment
 		"""
-		return [self.m_startAngle, self.m_stopAngle]
+		if math.isnan(self.m_startAngle) or math.isnan(self.m_stopAngle):
+			# if they are not defined, we search over the whole ellipse
+			return [0, 360, 360]
+		return [self.m_startAngle, self.m_stopAngle, self.m_deltaAngle]
 
 
 	def selfTest(self):
 		"""
 			Check the internal consistency
 		"""
-		#stopA1 = ZGeomItem.normalizeAngle(self.m_stopAngle)
-		#stopA2 = ZGeomItem.normalizeAngle(self.m_startAngle + self.m_deltaAngle)
+		if not self.containsPoint(self.m_start) or not self.containsPoint(self.m_stop):
+			self.containsPoint(self.m_start)
+			self.containsPoint(self.m_stop)
+			raise Exception('ZArcSegment:selfTest error: start/stop problem')
 
 		if not ZGeomItem.almostEqualAngles(self.m_stopAngle, self.m_startAngle + self.m_deltaAngle):
-			#print('stopA1: ' + str(stopA1))
-			#print('stopA2: ' + str(stopA2))
 			raise Exception('ZArcSegment:selfTest error: angle problem')
-
-		f1 = self.m_focus1
-		f2 = self.m_focus2
-		c = self.m_center
-		fO = self.m_focusOffsetVector
-		# i am not sure, if this is really true:
-		#if not f1.isSameAs(c + fO) or not f2.isSameAs(c - fO):
-		#	raise Exception('ZArcSegment:selfTest error: focus point problem')
 
 		startA = self.m_startAngle
 		pStart = self.getPointForParameter(startA)
 		pStop = self.getPointForParameter(self.m_stopAngle)
-		if not pStart.isSameAs(self.m_start) or not pStop.isSameAs(self.m_stop):
+		#if not pStart.isSameAs(self.m_start) or not pStop.isSameAs(self.m_stop):
+		if not self.pointsAreNear(pStart, self.m_start) or not self.pointsAreNear(pStop, self.m_stop):
 			raise Exception('ZArcSegment:selfTest error: parameter problem')
 
-		# normalVectoris currently not supported
-		#if not self.isACircle():
-		#	if not self.m_normalVector.isPerpendicular(self.m_focusOffsetVector):
-		#		raise Exception('ZArcSegment:selfTest error: normal vector problem')
+
+	#def adaptValuesFromOtherArc(self, otherArc):
+	#	self.m_rx = otherArc.m_rx
+	#	self.m_ry = otherArc.m_ry
+	#	self.m_xAngle = otherArc.m_xAngle
+	#	self.m_largeArcFlag = otherArc.m_largeArcFlag
+	#	self.m_sweepFlag = otherArc.m_sweepFlag
+	#	self.m_center = otherArc.m_center
+	#	self.m_startAngle = otherArc.m_startAngle
+	#	self.m_stopAngle = otherArc.m_stopAngle
+	#	self.m_deltaAngle = otherArc.m_deltaAngle
+	#	self.m_focus1 = otherArc.m_focus1
+	#	self.m_focus2 = otherArc.m_focus2
+	#	self.m_normalVector = otherArc.m_normalVector
+	#	self.m_focusOffsetVector = otherArc.m_focusOffsetVector
+	#	self.m_mapUnitCircleToSelf = otherArc.m_mapUnitCircleToSelf
 
 
-	def adaptValuesFromOtherArc(self, otherArc):
-		self.m_rx = otherArc.m_rx
-		self.m_ry = otherArc.m_ry
-		self.m_xAngle = otherArc.m_xAngle
-		self.m_largeArcFlag = otherArc.m_largeArcFlag
-		self.m_sweepFlag = otherArc.m_sweepFlag
-		self.m_center = otherArc.m_center
-		self.m_startAngle = otherArc.m_startAngle
-		self.m_stopAngle = otherArc.m_stopAngle
-		self.m_deltaAngle = otherArc.m_deltaAngle
-		self.m_focus1 = otherArc.m_focus1
-		self.m_focus2 = otherArc.m_focus2
-		self.m_normalVector = otherArc.m_normalVector
-		self.m_focusOffsetVector = otherArc.m_focusOffsetVector
-		self.m_mapUnitCircleToSelf = otherArc.m_mapUnitCircleToSelf
-
-
-	def makeFlat(self):
+	def makeFlatObsolete(self):
 		super().makeFlat()
 		self.m_center.m_z = 0
 		self.m_focus1.m_z = 0
@@ -985,29 +1018,59 @@ class ZArcSegment(ZPathSegment):
 		return ret
 
 
-	def adaptSvgValues(self):
+	def adaptFromEllipse(self):
+		ell = self.m_ellipse
+		#if not self.containsPoint(self.m_start):
+		#	print('debug me')
+		self.m_startAngle = math.nan	# clear for next calculations
+		self.m_stopAngle = math.nan
+		self.m_deltaAngle = math.nan
 
-		# calculate my center and focus points
+		# rather tricky !!
+		#arr  = self.findNearestPoint(self.m_start)
+		#pseudoStart = arr[1]
+		#arr = self.findNearestPoint(self.m_stop)
+		#pseudoStop = arr[1]
+
+		self.m_startAngle = self.paramForPoint(self.m_start)
+		self.m_stopAngle = self.paramForPoint(self.m_stop)
+
+		delta = self.m_stopAngle - self.m_startAngle
+		if delta < 0:
+			delta += 360
+		if (delta < 180 and self.m_largeArcFlag) or (delta > 180 and not self.m_largeArcFlag):
+			delta -= 360
+		self.m_deltaAngle = delta
+
+		self.selfTest()
+
+
+
+	def adaptFromSvgValues(self):
+
+		# calculate my ellipse from the svg paramaters
 		# i rotate myself around the origin, so i am axis parallel, so center calculation can be done more easyly
 		affine = Affine.makeRotationAffine(Line(Point(), Point(0, 0, 1)), - self.m_xAngle)
 		self.rotateBy(affine)
-		self.getMyCenter()
-		self.makeMyReference()
-		affInverse = affine.inverted()
+		self.calculateMyEllipse()
+		self.calculateFocusPoints()
+		
 		# rotate myself back to my real position:
+		affInverse = affine.inverted()
 		self.rotateBy(affInverse)
 
 		# make the affine that transforms a point on the unit circle to the corresponding point on me
-		affineRotation = Affine.makeRotationAffine(Line(self.m_center, direction=Point(0, 0, 1)), self.m_xAngle)
-		matrixStretch = Matrix([Point(self.m_rx), Point(0, self.m_ry), Point(0, 0, 1)])
-		affStretch = Affine(matrixStretch)
-		affTranslate = Affine(None, self.m_center)
-		affFull = affineRotation * affTranslate * affStretch
-		self.m_mapUnitCircleToSelf = affFull
+		#affineRotation = Affine.makeRotationAffine(Line(self.m_center, direction=Point(0, 0, 1)), self.m_xAngle)
+		#matrixStretch = Matrix([Point(self.m_rx), Point(0, self.m_ry), Point(0, 0, 1)])
+		#affStretch = Affine(matrixStretch)
+		#affTranslate = Affine(None, self.m_center)
+		#affFull = affineRotation * affTranslate * affStretch
+		#self.m_mapUnitCircleToSelf = affFull
 
 
 	def copy(self):
-		return ZArcSegment(self.m_rx, self.m_ry, self.m_xAngle, self.m_start, self.m_stop, self.m_largeArcFlag, self.m_sweepFlag, oldArc=self)
+		#return ZArcSegment(self.m_rx, self.m_ry, self.m_xAngle, self.m_start, self.m_stop, self.m_largeArcFlag, self.m_sweepFlag, oldArc=self)
+		return ZArcSegment(self.m_rx, self.m_ry, self.m_xAngle, self.m_start.copy(), self.m_stop.copy(), self.m_largeArcFlag, self.m_sweepFlag, ellipse3=self.m_ellipse.copy())
 
 
 	def printComment(self, comment, tabs=0, rounded=2):
@@ -1035,10 +1098,13 @@ class ZArcSegment(ZPathSegment):
 		self.m_sweepFlag = not self.m_sweepFlag
 
 
-	def makeMyReference(self):
-		# my reference is a Circle2 in the xy plane with radius 1
-		# self.m_affineFromReference is an affine, that maps (1,0) and (0, 1) to
-		# my respective points
+	def calculateFocusPoints(self):
+		"""
+			(re-)calculate my focus points
+		"""
+
+		if self.m_center is None:
+			return
 
 		# create focus points:
 		rx = self.m_rx
@@ -1063,32 +1129,19 @@ class ZArcSegment(ZPathSegment):
 
 
 	def getPointForParameter(self, angle):
-		affFull = self.m_mapUnitCircleToSelf
-		refPoint = Circle2(Point(), 1).pointForAngle(angle)
-		return affFull * refPoint
+		return self.m_ellipse.pointForParam(angle)
+		#affFull = self.m_mapUnitCircleToSelf
+		#refPoint = Circle2(Point(), 1).pointForAngle(angle)
+		#return affFull * refPoint
 
 
 	def getInterPointAtParameter(self, t):
 		return self.getPointForParameter(t)
 
 
-	def getPointForParameterWithTangents(self, angle):
-		affFull = self.m_mapUnitCircleToSelf
-
-		refPoint = Circle2(Point(), 1).pointForAngle(angle)
-		refTangent = refPoint.crossProduct(Point(0, 0, 1))
-		#if self.m_sweepFlag:
-		#	refTangent = - refTangent
-		return [affFull * refPoint, affFull * refTangent]
-
-
-	def containsPoint(self, point):
-		# is this really needed? there is a method in superclass!!!
-		# does not check, if point.m_z == 0
-		f1 = self.m_focus1
-		f2 = self.m_focus2
-		d = f1.distanceOfPoint(point) + f2.distanceOfPoint(point) - 2*self.getBiggerRadius()
-		return ZGeomItem.almostEqual(d, 0)
+	def getPointForParameterWithTangent(self, angle):
+		ell = self.m_ellipse
+		return [ell.pointForParam(angle), ell.tangentForParam(angle)]
 
 
 	def getBiggerRadius(self):
@@ -1111,8 +1164,10 @@ class ZArcSegment(ZPathSegment):
 		return math.degrees(math.copysign(math.acos(c), s))
 
 
-	def getMyCenter(self): 		# , x1, y1, x2, y2, fA, fS, rx, ry, phi=0):
+	def calculateMyEllipse(self): 		# , x1, y1, x2, y2, fA, fS, rx, ry, phi=0):
 		'''
+		Calculate my ellipse from the svg arguments
+		Note that we have rotated to be axis parallel
 		See http://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes F.6.5
 		note that we reduce phi to zero outside this routine
 		'''
@@ -1204,24 +1259,18 @@ class ZArcSegment(ZPathSegment):
 		elif fS == 1 and dtheta < 0:
 			dtheta += 360
 
-		self.m_center = Point(cx, cy)
-		self.m_rx = rx
-		self.m_ry = ry
-		self.m_startAngle = theta1
-		self.m_deltaAngle = dtheta
-		self.m_stopAngle = ZGeomItem.normalizeAngle(self.m_startAngle + self.m_deltaAngle)
+		#self.m_center = Point(cx, cy)
+		#self.m_rx = rx
+		#self.m_ry = ry
+		#self.m_startAngle = theta1
+		#self.m_deltaAngle = dtheta
+		#self.m_stopAngle = ZGeomItem.normalizeAngle(self.m_startAngle + self.m_deltaAngle)
+
+		self.m_ellipse = Ellipse3(Point(cx, cy), diam1=Point(rx), diam2=Point(0, ry))
 
 
-	def belongsToSameEllipse(self, other):
-		if not self.m_center.isSameAs(other.m_center):
-			return False
-		if not ZGeomItem.almostEqual(self.m_rx, other.m_rx):
-			return False
-		if not ZGeomItem.almostEqual(self.m_ry, other.m_ry):
-			return False
-		if not ZGeomItem.almostEqual(self.m_xAngle, other.m_xAngle):
-			return False
-		return True
+	def belongsToSameEllipse(self, otherArc):
+		return self.m_ellipse.isSameAs(otherArc.m_ellipse)
 
 
 	def rotateBy(self, affine):
@@ -1229,14 +1278,15 @@ class ZArcSegment(ZPathSegment):
 		self.m_start = affine * self.m_start
 		self.m_stop = affine * self.m_stop
 
-		if self.m_center:
-			self.m_center = affine * self.m_center
-
-		if self.m_focus1:
-			self.m_focus1 = affine * self.m_focus1
-
-		if self.m_focus2:
-			self.m_focus2 = affine * self.m_focus2
+		if self.m_ellipse:
+			# ellipse might not yet be set!
+			# the following is only possible for orthonormal affines!
+			ell = self.m_ellipse
+			cn = affine * ell.m_center
+			p1n = affine * ell.m_vert1
+			p2n = affine * ell.m_vert2
+			self.m_ellipse = Ellipse3(cn, vert1=p1n, vert2=p2n)
+			
 
 		radians = math.radians(self.m_xAngle)
 		offset = Point(math.cos(radians), math.sin(radians))
@@ -1248,46 +1298,70 @@ class ZArcSegment(ZPathSegment):
 
 	def transformBy(self, affine):
 		"""
-			Transform myself. Return nothing
+			Transform myself. Return nothing. Rather complicated
 		"""
-		# for now we leave the both flags untouched
-		oldStart = self.m_start
-		oldStop = self.m_stop
-		oldCenter = self.m_center
-		# we must recalculate the radii
-		oldVertexX = self.m_mapUnitCircleToSelf * Point(1)
-		oldVertexY = self.m_mapUnitCircleToSelf * Point(0, 1)
+		#if not affine.isOrthonormal():
+		#	raise Exception('ZArcSegement: affine to transform by must be orthonormal')
+		#if not affine.isInvertible():
+		#	raise Exception('ZArcSegement: affine to transform by must be invertible')
+		self.m_start = affine * self.m_start
+		self.m_stop = affine *  self.m_stop
+		ell = self.m_ellipse
+		newCenter = affine * ell.m_center
 
-		newStart = affine * oldStart
-		newStop = affine * oldStop
-		newCenter = affine * oldCenter
-		newVertexX = affine * oldVertexX
-		newVertexY = affine * oldVertexY
+		# Unfortunately the affine images of the ellipse main axes in general are not the main axes of the image of the ellipse
+		# Trying to find the axes:
 
-		newRx = newCenter.distanceOfPoint(newVertexX)
-		newRy = newCenter.distanceOfPoint(newVertexY)
-		newXAngle = Affine.fullAngleBetween2d(Point(1), newVertexX - newCenter)
-		if ZGeomItem.almostEqual(newRx, newRy):
-			newRx = newRy
-		self.m_rx = newRx
-		self.m_ry = newRy
-		self.m_xAngle = newXAngle
+		#oldStartAngle = self.m_startAngle
+		#oldStopAngle = self.m_stopAngle
+		#oldDeltaAngle = self.m_deltaAngle
 
-		self.m_start = newStart
-		self.m_stop = newStop
-		self.m_center = newCenter
-		print('recalculation of focus points is questionable')
-		self.m_focus1 = affine * self.m_focus1
-		self.m_focus2 = affine * self.m_focus2
+		# these will be newly calculated:
+		self.m_startAngle = math.nan
+		self.m_stopAngle = math.nan
+		self.m_deltaAngle = math.nan
 
-		matrix = affine.m_matrix
-		self.m_normalVector = matrix * self.m_normalVector
-		self.m_focusOffsetVector = self.m_focus1 - self.m_center
+		# these seem to be obsolete:
+		#self.m_xAngle = math.nan
+		#self.m_rx = math.nan
+		#self.m_ry = math.nan
 
-		self.m_mapUnitCircleToSelf = affine * self.m_mapUnitCircleToSelf
+		# now find the vertex points of the new ellipse
+		# nearest and farest from the new center
+		lambdaSmall = lambda p: newCenter.distanceOf(affine * p)
+		arrSmall = self.findMinimalPoint(lambdaSmall)
+		#	[segment, point, segParameter, value]
+		minPoint = affine * arrSmall[1]
+		minDist = arrSmall[3]
+		diamMin = minPoint - newCenter
+		
+		lambdaGreat = lambda p: -newCenter.distanceOf(affine * p)
+		arrGreat = self.findMinimalPoint(lambdaGreat)
+		maxPoint = affine * arrGreat[1]
+		maxDist = -arrGreat[3]
+		diamMax = maxPoint - newCenter
 
-		#self.adaptSvgValues()
-		self.selfTest()
+		if ZGeomItem.almostEqual(minDist, maxDist):
+			# new ellipse is a circle, we must ensure, that the vertices lie on different axes
+			oldNormale = ell.getNormale()
+			newNormale = affine.m_matrix * oldNormale
+			#newDiam1 = minPoint - newCenter
+			#newDiam2 = newNormale.crossProduct(diamMin).scaledTo(minDist)
+			diamMax = newNormale.crossProduct(diamMin).scaledTo(minDist)
+			maxPoint = newCenter + diamMax
+			#diamMax = maxPoint - newCenter
+
+		theAngle = diamMin.angleTo(diamMax)
+		if abs(abs(theAngle) - 90) > 1:
+			raise Exception('ZarcSegment:transformBy() illegal new Ellipse')
+		#print(f'new angle: {theAngle}')
+
+		if self.m_ellipse is None:
+			raise Exception('Hoppala, this is not expected!!')
+		#self.m_ellipse = affine * self.m_ellipse
+		self.m_ellipse = Ellipse3(newCenter, vert1=maxPoint, vert2=minPoint)
+		self.adaptFromEllipse()
+		return
 
 
 	def getInterPoints(self, offset):
@@ -1315,13 +1389,14 @@ class ZArcSegment(ZPathSegment):
 
 
 	def getInterPointsWithTangent(self, offset):
+		
 		points = []
 		angle = self.m_startAngle
 		numberOfSteps = 1.0 / offset
 		stepAngle = self.m_deltaAngle / numberOfSteps
 		stepNo = 0
 		while stepNo < numberOfSteps:
-			ownPoint, ownTan = self.getPointForParameterWithTangents(angle)
+			ownPoint, ownTan = self.getPointForParameterWithTangent(angle)
 			#ownPoint.printComment('step ' + str(stepNo))
 			points.append([ownPoint, ownTan])
 			angle = angle + stepAngle
@@ -1330,7 +1405,7 @@ class ZArcSegment(ZPathSegment):
 
 
 	def getInterPointWithTangent(self, param):
-		return self.getPointForParameterWithTangents(param)
+		return self.getPointForParameterWithTangent(param)
 
 
 	def __str__(self):
@@ -1489,20 +1564,26 @@ class ZPath:
 		self.reverse()
 
 
-	def getInterPoints(self, offset):
+	def getInterPoints(self, step):
+		"""
+			Return a list of [points with given parameter step width
+		"""
 		points = []
 		for seg in self.m_segments:
-			newOnes = seg.getInterPoints(offset)
+			newOnes = seg.getInterPoints(step)
 			if len(points) > 0 and points[-1].isSameAs(newOnes[0]):
 				points.pop()
 			points.extend(newOnes)
 		return points
 
 
-	def getInterPointsWithTangent(self, offset):
+	def getInterPointsWithTangent(self, step):
+		"""
+			Return a list of arrays with [point, tangent] with given parameter step width
+		"""
 		points = []
 		for seg in self.m_segments:
-			points.extend(seg.getInterPointsWithTangent(offset))
+			points.extend(seg.getInterPointsWithTangent(step))
 		return points
 
 

@@ -9,7 +9,7 @@ import numbers
 import math
 
 
-from zutils.ZGeom import ZGeomItem, Point, Line, Plane, Circle2
+from zutils.ZGeom import ZGeomItem, Point, Line, Plane, Circle2, Ellipse3
 
 
 ##########################################
@@ -594,6 +594,17 @@ class Affine(ZGeomItem):
 		return Circle2(c2, r2)
 
 
+	#def applyEllipse3(self, ellipse3) -> Ellipse3:
+	#	wrong implementation!!!
+	#	c = ellipse3.m_center
+	#	p1 = ellipse3.m_vert1
+	#	p2 = ellipse3.m_vert2
+	#	cn = self.apply(c)
+	#	p1n = self.apply(p1)
+	#	p2n = self.apply(p2)
+	#	return Ellipse3(cn, vert1=p1n, vert2=p2n)
+
+
 	def inverted(self) -> Affine:
 		inv = self.m_matrix.inverted()
 		point = - (inv * self.m_shift)
@@ -609,7 +620,11 @@ class Affine(ZGeomItem):
 			return self.applyPlane(other)
 		if isinstance(other, Circle2):
 			return self.applyCircle2(other)
-		return self.concat(other)
+		#if isinstance(other, Ellipse3):
+		#	return self.applyEllipse3(other)
+		if isinstance(other, Affine):
+			return self.concat(other)
+		raise Exception('illegal argument for Affine multiplication: ' + str(other))
 
 
 	def __str__(self):

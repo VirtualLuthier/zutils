@@ -6,6 +6,7 @@
 	- Rect
 	- Circle2
 	- Ellipse2
+	- Ellipse3
 	- Line
 	- Plane
 	- Polygon
@@ -17,6 +18,7 @@ from __future__ import annotations
 from typing import List
 import math
 import random
+from scipy.optimize import minimize_scalar
 #from typing_extensions import Annotated
 
 import xml.etree.ElementTree as ET
@@ -121,7 +123,10 @@ class ZGeomItem:
 		"""
 			Return 0 <= something < 360.
 		"""
-
+		if cls.almostZero(angle):
+			return 0
+		if cls.almostEqual(angle, 360):
+			return 0
 		while angle >= 360:
 			angle = angle - 360
 		while angle < 0:
@@ -455,6 +460,10 @@ class Point(ZGeomItem):
 		diff = self - otherPoint
 		#return 	ZGeomItem.almostQuadraticEqual(diff * diff, 0)
 		return 	ZGeomItem.almostZero(diff.length())
+
+
+	def isZero(self):
+		return self.isSameAs(Point())
 
 
 	def anyPerpendicularPoint(self) -> Point:
@@ -880,6 +889,147 @@ class Ellipse2(ZGeomItem):
 
 #############################################################
 #############################################################
+
+
+class Ellipse3(ZGeomItem):
+	"""
+		Ellipse in 3d
+	"""
+	
+	def __init__(self, center, diam1=None, diam2=None, vert1=None, vert2=None):
+		super().__init__()
+		if (diam1 is None and vert1 is None) or (diam1 is not None and vert1 is not None):
+			raise Exception('exactly one of diam1 and vert1 must be not None')
+		if (diam2 is None and vert2 is None) or (diam2 is not None and vert2 is not None):
+			raise Exception('exactly one of diam2 and vert2 must be not None')
+
+		if diam1 is None:
+			diam1 = vert1 - center
+		else:
+			vert1 = center + diam1
+		if diam2 is None:
+			diam2 = vert2 - center
+		else:
+			vert2 = center + diam2
+
+		if diam1.isZero() or diam2.isZero():
+			raise Exception('both radii must be > 0')
+
+		if not diam1.isPerpendicular(diam2):
+			raise Exception('Ellipse3: diameters must be perpendicular')
+
+		if diam2.length() > diam1.length():
+			# sort according length
+			diam1, diam2 = diam2, diam1
+			vert1, vert2 = vert2, vert1
+
+		self.m_center = center
+		self.m_diam1 = diam1
+		self.m_diam2 = diam2
+		self.m_vert1 = vert1
+		self.m_vert2 = vert2
+
+		#self.m_rad1 = diam1.length()
+		#self.m_rad2 = diam2.length()
+		self.m_cachedPoints = None
+
+
+	def copy(self):
+		return Ellipse3(self.m_center, self.m_diam1, self.m_diam2)
+
+
+	def getNormale(self):
+		return self.m_diam1.crossProduct(self.m_diam2).unit()
+
+
+	def pointForParam(self, degrees):
+		"""
+			Return the point on me with the given angle. Start: my vert1, running over my vert2
+		"""
+		angle = (degrees / 180) * math.pi
+		return self.m_center + self.m_diam1.scaledBy(math.cos(angle)) + self.m_diam2.scaledBy(math.sin(angle))
+
+
+	def tangentForParam(self, degrees):
+		"""
+			Return the tangent (not normalized) at a agiven parameter
+		"""
+		angle = (degrees / 180) * math.pi
+		# this is simply the derivative of the point formula with respect to angle
+		return -self.m_diam1.scaledBy(math.sin(angle)) + self.m_diam2.scaledBy(math.cos(angle))
+
+
+	def provideCachedPoints(self):
+		if self.m_cachedPoints is not None:
+			return
+		num = 360
+		step = 360.0 / num
+		cache = [None] * num
+		for ii in range(num):
+			cache[ii] = self.pointForParam(step * ii)
+		self.m_cachedPoints = cache
+
+	def paramForPoint(self, point):
+		"""
+			Return the parameter value that leads to this point (if exists) in range between 0 and 359.999
+		"""
+		myLambda = lambda angle: point.distanceOf(self.pointForParam(angle))
+		self.provideCachedPoints()
+		minDist = 100000000
+		minIdx = -1
+		idx = 0
+		for p in self.m_cachedPoints:
+			dist = p.distanceOf(point)
+			if dist < minDist:
+				minDist = dist
+				minIdx = idx
+			idx += 1
+		print(f'minIdx = {minIdx}, min = {minDist}')
+
+		#result = minimize_scalar(myLambda, bounds=(0, 360), method='bounded')
+		result = minimize_scalar(myLambda, bounds=(idx - 1, idx + 1), method='bounded')
+		#print(result)
+		if self.almostZero(result.fun):
+			ret = result.x
+			if self.almostEqual(ret, 360):
+				ret = 0
+			return ret
+		return math.nan
+
+
+
+	def isSameAs(self, otherEllipse):
+		if not self.m_center.isSameAs(otherEllipse.m_center):
+			return False
+		if not self.getNormale().isCollinear(otherEllipse.getNormale()):
+			return False
+		if self.isCircle():
+			if not otherEllipse.isCircle():
+				return False
+			if not self.almostEqual(self.m_diam1.length(), otherEllipse.m_diam1.length()):
+				return False
+			return True
+		if not self.m_diam1.isCollinear(otherEllipse.m_diam1):
+			return False
+		if not self.m_diam2.isCollinear(otherEllipse.m_diam2):
+			return False
+		return True
+
+
+	def containsPoint(self, point):
+		"""
+			return True, if point lies on me, else False
+		"""
+		test = self.paramForPoint(point)
+		return not math.isnan(test)
+
+
+	def isCircle(self):
+		return self.almostEqual(self.m_diam1.length(), self.m_diam2.length())
+
+
+##############################################################
+##############################################################
 
 
 class Line(ZGeomItem):

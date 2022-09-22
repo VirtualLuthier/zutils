@@ -7,7 +7,7 @@ import unittest
 from context import zutils		#, testInFolder, testOutFolder
 
 
-from zutils.ZGeom import ZGeomItem, Point, Plane, Line, Polygon, Circle2
+from zutils.ZGeom import ZGeomItem, Point, Plane, Line, Polygon, Circle2, Ellipse3
 from zutils.ZGeomHelper import ZGeomHelper
 from zutils.ZMatrix import Matrix, Affine
 from zutils.ZD3Body import  ZCylinder, ZCone, ZBall3d
@@ -584,7 +584,38 @@ class TestZGeom(unittest.TestCase):
 		self.assertTrue((aff * ppp).isSameAs(cone1.m_center2))
 
 
+	def test_Ellipse3(self):
+		c = Point(1, 2, 3)
+		diam1 = Point(0, 6, 7)	# the longer one
+		diam2 = diam1.expandToOrthonormalBase()[1]					#	Point(0, 6)
 
+
+		#c = Point()
+		#diam1 = Point(0, 1)
+		#diam2 = Point(1)
+		
+		ell = Ellipse3(c, diam1= diam1, diam2=diam2)
+		v1 = c + diam1
+		v2 = c + diam2
+		v3 = c - diam1
+		v4 = c - diam2
+		self.comparePoints(v1, ell.pointForParam(0))
+		self.comparePoints(v2, ell.pointForParam(90))
+		self.comparePoints(v3, ell.pointForParam(180))
+		self.comparePoints(v4, ell.pointForParam(270))
+
+		#num = 20
+		#for ii in range(num):
+		#	par = (359 / num) * ii
+		#	pt = ell.pointForParam(par)
+		#	par2 = ell.paramForPoint(pt)
+		#	if math.isnan(par2):
+		#		ell.paramForPoint(pt)
+		#	#print(f'par: {par}, pt: {pt}, par2: {par2}')
+		#	#self.assertTrue(par2 is not None)
+		#	self.assertAlmostEqual(par, par2, 4)
+
+		##p = 
 
 
 ########################################################
