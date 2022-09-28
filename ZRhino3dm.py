@@ -260,7 +260,7 @@ class ZRhinoFile:
 
 	def addLine(self, start, stop, name=None, polyCurve=None):
 		"""
-			Add a nurbs curve from a line segment. Set name, group and layer
+			Add a nurbs curve from a line segment. Set name, group and layer. . If polyCurve is given, add to it
 		"""
 		line = rhino.Line(self.makeRhinoPoint(start), self.makeRhinoPoint(stop))
 		curve = rhino.NurbsCurve.CreateFromLine(line)
@@ -269,7 +269,7 @@ class ZRhinoFile:
 
 	def addPolyLine(self, points, name=None, polyCurve=None):
 		"""
-			Add a nurbs curve from a polyline. Set name, group and layer
+			Add a nurbs curve from a point array. Set name, group and layer. If polyCurve is given, add to it
 		"""
 		#line = rhino.Line(self.makeRhinoPoint(start), self.makeRhinoPoint(stop))
 			#.CreateFromLine(line)
@@ -289,7 +289,8 @@ class ZRhinoFile:
 	def addSvgSegment(self, seg, name, polyCurve):
 		"""
 			Add an svg segment to myself or the given polycurve
-			Raise exception, if segment is a non-circle Ellipse
+			Raise exception, if segment is a non-circle Ellipse.
+			If polyCurve is given, add to it
 		"""
 		className = seg.__class__.__name__
 		start = seg.m_start
@@ -315,7 +316,7 @@ class ZRhinoFile:
 
 	def addArcCurve(self, startP, interP, endP, name=None, polyCurve=None):
 		"""
-			Add a partial circle arc
+			Add a partial circle arc. If polyCurve is given, add to it
 		"""
 		rhStart, rhInter, rhEnd = [self.makeRhinoPoint(x) for x in [startP, interP, endP]]
 		arc = rhino.Arc(rhStart, rhInter, rhEnd)
@@ -327,7 +328,7 @@ class ZRhinoFile:
 		"""
 			Create and add a full circle curve. If normal == None in x-y-plain.
 			startDir is a Vector from center to the startPoint(perpendicular to normal, important for lofting)
-			In reality creates a polycurve with 2 half circles
+			In reality creates a polycurve with 2 half circles. If polyCurve is given, add to it
 		"""
 		if normal is None:
 			normal = Point(0, 0, 1)
@@ -368,13 +369,23 @@ class ZRhinoFile:
 
 	def addCurve(self, curve, name=None, polyCurve=None):
 		"""
-			Add any curve. Set name and layer
+			Add any curve. Set name and layer. If polyCurve is given, add to it
 		"""
 
 		if polyCurve is not None:
 			polyCurve.Append(curve)
 			return
 		self.m_fileObject.Objects.AddCurve(curve, self.makeAttributes(name))
+
+
+	def addTextDot(self, point, text):
+		rPoint = self.makeRhinoPoint(point)
+		self.m_fileObject.Objects.AddTextDot(text, rPoint)		#	, self.makeAttributes(name))
+
+
+	def addTextArrow(self, point, text, point2, name=None):
+		self.addTextDot(point, text)
+		self.addLine(point, point2, name=name)
 
 
 	def addConeCurvesOld(self, start, radius1, stop, radius2, name=None):
