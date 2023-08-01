@@ -6,6 +6,8 @@
 	- call root.writeScadTo(fileName)
 """
 
+# should also be regarded: CadQuery
+
 ###############################################
 ###############################################
 

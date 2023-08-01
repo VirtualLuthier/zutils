@@ -321,6 +321,13 @@ class Point(ZGeomItem):
 			return the euklidean length of me
 		"""
 		return math.sqrt(self * self)
+		
+		
+	def lengthSquared(self) -> float:
+		"""
+			return the square of the length (faster)
+		"""
+		return self * self
 
 
 	def __add__(self, other) -> Point:

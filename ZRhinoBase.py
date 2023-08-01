@@ -8,6 +8,7 @@
 	- rs.AddNetworkSrf()
 	- rs.AddNetworkSrfEx()	??????????
 	- rs.AddPatch()
+	- rs.AddPlanarSrf()
 	- rs.BooleanDifference()
 	- rs.BooleanIntersection()
 	- rs.CapPlanarHoles()

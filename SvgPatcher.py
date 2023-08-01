@@ -113,7 +113,7 @@ class SvgPatcher:
 	def write(self):
 		#self.m_tree.write('svg/raw.svg', "utf-8") # used for debugging
 		pretty = self.prettify(self.m_root)
-		with open(self.m_targetFile, 'w') as f:
+		with open(self.m_targetFile, 'wb') as f:	# use 'wb', as prettify returns a byte string
 			f.write(pretty)
 
 
@@ -122,7 +122,7 @@ class SvgPatcher:
 		rough_string = ET.tostring(elem, 'utf-8')
 		#print(rough_string)
 		reparsed = minidom.parseString(rough_string)
-		return reparsed.toprettyxml(indent="	", newl='\n')
+		return reparsed.toprettyxml(indent="	", newl='\n', encoding='utf-8')
 		#return reparsed.toprettyxml(indent="  ")
 
 
