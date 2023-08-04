@@ -300,14 +300,10 @@ class ZRhinoFile:
 			return
 		if className in ['ZBezier3Segment', 'ZBezier2Segment']:
 			self.addBezierCurve(seg, name, polyCurve)
-		#	self.addBezierCurve([start, seg.m_handleStart, seg.m_handleStop,  stop], name, polyCurve)
-		#	return
-		#if className == 'ZBezier2Segment':
-		#	self.addBezierCurve([start, seg.m_handle,  stop], name, polyCurve)
 			return
 		if className == 'ZArcSegment':
 			if seg.isACircle():
-				interP = seg.getMyMiddlePoint()				#	seg.getPointForParameter(0.5)
+				interP = seg.getMyMiddlePoint()
 				self.addArcCurve(seg.m_start, interP, seg.m_stop, name, polyCurve)
 				return
 
@@ -324,7 +320,7 @@ class ZRhinoFile:
 		self.addCurve(curve, name, polyCurve)
 
 
-	def addFullCircle(self, center, radius, normal=None, startDir=None, name=None):		#, polyCurve=None):
+	def addFullCircle(self, center, radius, normal=None, startDir=None, name=None):
 		"""
 			Create and add a full circle curve. If normal == None in x-y-plain.
 			startDir is a Vector from center to the startPoint(perpendicular to normal, important for lofting)
@@ -380,7 +376,7 @@ class ZRhinoFile:
 
 	def addTextDot(self, point, text):
 		rPoint = self.makeRhinoPoint(point)
-		self.m_fileObject.Objects.AddTextDot(text, rPoint)		#	, self.makeAttributes(name))
+		self.m_fileObject.Objects.AddTextDot(text, rPoint)
 
 
 	def addTextArrow(self, point, text, point2, name=None):
@@ -488,8 +484,6 @@ class ZRhinoFile:
 		if isinstance(colorNameOrTuple, list) or isinstance(colorNameOrTuple, tuple):
 			if len(colorNameOrTuple) == 4:
 				return tuple(colorNameOrTuple)
-				#return (colorNameOrTuple[0], colorNameOrTuple[1], colorNameOrTuple[2], colorNameOrTuple[3])
-			#return (colorNameOrTuple[0], colorNameOrTuple[1], colorNameOrTuple[2], 255)
 			return tuple(colorNameOrTuple, 255)	# ?????????????????????
 
 		colorName = colorNameOrTuple.lower()
