@@ -13,6 +13,7 @@ from zutils.ZGeom import Point, Plane
 from zutils.ZMatrix import Affine, Matrix
 from zutils.OSCNode import OSCRoot, OSCForm3d, OSCCylinder, OSCSphere
 from zutils.Form3d import Form3d
+from zutils.SvgReader import SvgPathReader
 
 
 ##################
@@ -259,6 +260,14 @@ def testCreateSurfsFromCurves():
 	root.writeScadTo(s_outputRootFolder + '/testCreateSurfsFromCurves.scad')
 
 
+def test_parallelCurve():
+	testPathString = 'm 66.153132,271.84802 c 72.699538,1.37819 81.699668,-7.15265 103.364268,-26.53016 38.24745,-34.20973 5.69676,-60.51171 -8.95824,-73.04408 -43.53203,-37.22685 -90.960552,2.06729 -90.960552,2.06729'
+	testPath = SvgPathReader.classParsePath(testPathString)
+	sislCurve = SislCurveHolder.createCurveFromPath(testPath)
+	sislCurve.dump('parallel input curve')
+	parallelCurve = sislCurve.createOffsetCurve(1.0, 0.001, Point(0, 0, 1))
+	parallelCurve.dump('the found parallel curve')
+
 ##################
 
 # now create the output folders
@@ -283,3 +292,4 @@ testSmoothTransition()
 testJoin2Curves()
 testCurveConstant()
 testCreateSurfsFromCurves()
+test_parallelCurve()

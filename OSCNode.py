@@ -21,6 +21,8 @@ from zutils.ZGeom import Point, Line, Plane, Polygon, Circle2
 from zutils.ZMatrix import Matrix, Affine
 from zutils.ZUnits import ZUnits
 
+# also uses Form3d in class OSCForm3d
+
 
 #################################################
 #################################################
@@ -216,7 +218,7 @@ class OSCAbstract:
 
 
 	def structureString(self):
-		return self.m_type + ' | ' + self.m_name
+		return self.m_type + ' | "' + self.m_name + '"'
 
 
 	def addXmlTo(self, parXml):

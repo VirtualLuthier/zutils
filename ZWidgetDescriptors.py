@@ -46,12 +46,18 @@ class WidgetDesc:
 		self.m_dimmed = dimmed
 
 
-	def setOwnerVal(self, val):
+	def setOwnerVal(self, val):	
+		#print(f'setOwnerVal: {self.m_owner}')
 		if self.m_editor is not None:
+			#print(f'setOwnerVal2: {self.m_owner}')
 			oldVal = self.m_owner.__dict__[self.m_varName]
 			if val != oldVal:
-				self.m_editor.m_changedFlag = True
+				self.m_owner.__dict__[self.m_varName] = val
+				self.m_editor.attributeHasChanged()
+				return
 		self.m_owner.__dict__[self.m_varName] = val
+		
+		
 
 
 	def xmlUnder(self, parent):
@@ -230,12 +236,16 @@ class WidgetDescDoubleLineInput(WidgetDesc):
 	"""
 	def __init__(self, owner, caption, varName, minVal=math.nan, maxVal=math.nan, numDigitsAfter=math.nan, dimmed=False):
 		super().__init__(owner, caption, varName, ZWidgetType.DOUBLELINEINPUT, dimmed)
+		#print(f'create WidgetDescDoubleLineInput {self.m_owner}')
 		self.m_minVal = minVal
 		self.m_maxVal = maxVal
 		self.m_numDigitsAfter = numDigitsAfter
 
 
 	def valueChanged(self, value):
+		#print(f'valueChanged (ignored):')
+		#print(f'valueChanged (ignored): {value}')
+		#return
 		self.setOwnerVal(self.valueFromString(value))
 
 

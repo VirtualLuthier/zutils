@@ -705,5 +705,6 @@ class SvgCommandArc(SvgCommand):
 
 
 	def asPartPathCollection(self):
-		ret = ZArcSegment(self.m_rx, self.m_ry, self.m_xAngle, self.m_start, self.m_stop, self.m_largeArcFlag, self.m_sweepFlag)
+		#ret = ZArcSegment(self.m_rx, self.m_ry, self.m_xAngle, self.m_start, self.m_stop, self.m_largeArcFlag, self.m_sweepFlag)
+		ret = ZArcSegment.createZArcFromSvg(self.m_rx, self.m_ry, self.m_xAngle, self.m_start, self.m_stop, self.m_largeArcFlag, self.m_sweepFlag)
 		return [ret]

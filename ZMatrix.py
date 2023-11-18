@@ -64,8 +64,16 @@ class Matrix(ZGeomItem):
 
 	@classmethod
 	def makeOrthonormalTransformation(cls, px: Point=None, py: Point=None, pz: Point=None) -> Matrix:
+		'''
+			wrong naming
+		'''
+		raise Exception('please use makeOrthogonalTransformation')
+
+
+	@classmethod
+	def makeOrthogonalTransformation(cls, px: Point=None, py: Point=None, pz: Point=None) -> Matrix:
 		"""
-			Return a orthonormal matrix that transforms (1, 0, 0) to px (normalized),  ...
+			Return a orthogonal matrix that transforms (1, 0, 0) to px (normalized),  ...
 			If only 1 or 2 argument is given, random rest args are created.
 		"""
 		done = ''
@@ -346,6 +354,16 @@ class Matrix(ZGeomItem):
 
 
 	def isOrthonormal(self) -> bool:
+		'''
+			wrong name for isOrthogonal()
+		'''
+		raise Exception('please use isOrthogonal() instead')
+	
+
+	def isOrthogonal(self) -> bool:
+		'''
+			check if my tramsposed is my inverse
+		'''
 		return (self * self.transposed()).isSameAs(Matrix())
 
 
@@ -416,7 +434,7 @@ class Affine(ZGeomItem):
 
 		point = line.m_p1
 		affineShift = Affine(None, -point)
-		matrix = Matrix.makeOrthonormalTransformation(pz=line.m_direction).inverted()
+		matrix = Matrix.makeOrthogonalTransformation(pz=line.m_direction).inverted()
 		affineBaseTransform = Affine(matrix)
 		ret = affineBaseTransform * affineShift
 		rotMatrixXY = Matrix.makeEulerRotation(angleDegrees, 'z')	# rotation in x-y plane
@@ -439,7 +457,7 @@ class Affine(ZGeomItem):
 			raise Exception('illegal point given for morphPlaneToXY()')
 		offsetX = (pointX - point0).unit()
 		normal = plane.m_normal.unit()
-		matrix = Matrix.makeOrthonormalTransformation(px=offsetX, pz=normal)
+		matrix = Matrix.makeOrthogonalTransformation(px=offsetX, pz=normal)
 		matrix = matrix.inverted()
 		affTrans = Affine(None, -point0)
 		affOrtho = Affine(matrix)
@@ -594,15 +612,23 @@ class Affine(ZGeomItem):
 		return Circle2(c2, r2)
 
 
-	#def applyEllipse3(self, ellipse3) -> Ellipse3:
-	#	wrong implementation!!!
-	#	c = ellipse3.m_center
-	#	p1 = ellipse3.m_vert1
-	#	p2 = ellipse3.m_vert2
-	#	cn = self.apply(c)
-	#	p1n = self.apply(p1)
-	#	p2n = self.apply(p2)
-	#	return Ellipse3(cn, vert1=p1n, vert2=p2n)
+	def applyEllipse3(self, ellipse3) -> Ellipse3:
+		'''
+			will only work reliably for orthogonal matrixes! For other matrices it might work sometimes
+		'''
+		c = ellipse3.m_center
+		p1 = ellipse3.m_vert1
+		p2 = ellipse3.m_vert2
+		cn = self.apply(c)
+		p1n = self.apply(p1)
+		p2n = self.apply(p2)
+		diam1 = p1n - cn
+		diam2 = p2n - cn
+		if not diam1.isPerpendicular(diam2):
+			ortho = 'YES' if self.m_matrix.isOrthogonal() else 'NO'
+			msg = f'Affine: illegal ellipse3 transformation: transformed axes are not perpendicular, matrix is orthogonal: {ortho}'
+			raise Exception(msg)
+		return Ellipse3(cn, vert1=p1n, vert2=p2n)
 
 
 	def inverted(self) -> Affine:
@@ -620,8 +646,8 @@ class Affine(ZGeomItem):
 			return self.applyPlane(other)
 		if isinstance(other, Circle2):
 			return self.applyCircle2(other)
-		#if isinstance(other, Ellipse3):
-		#	return self.applyEllipse3(other)
+		if isinstance(other, Ellipse3):
+			return self.applyEllipse3(other)
 		if isinstance(other, Affine):
 			return self.concat(other)
 		raise Exception('illegal argument for Affine multiplication: ' + str(other))

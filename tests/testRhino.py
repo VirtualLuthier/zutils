@@ -182,7 +182,7 @@ class TestRhino(unittest.TestCase):
 
 		r = 100
 		c = Point(0, -10, -r + 10)
-		rh.addCylinderCurvesOld(c, r, c + Point(0, l + 20) , name='fretboard-rounding')
+		rh.addCylinderCurves(c, r, c + Point(0, l + 20) , name='fretboard-rounding')
 
 		rh.getLayerWithFullPath('FretBoard::solids')
 		rh.write()
@@ -635,8 +635,8 @@ class TestRhino(unittest.TestCase):
 		normal = stop - start
 		startDir = normal.anyPerpendicularPoint()
 		cone = ZCone.makeCones(Point(20, 20, -5), 8, Point(20, 20, 15), 4, startDir)[0]
-		rh.addConeCurves(cone, name='firstHole')			#	(Point(20, 20, -5), 8, Point(20, 20, 15), 4, name='firstHole')
-		rh.addCylinderCurvesOld(Point(20, 40, 5), 6, Point(20, 40, 15) , name='secondHole')
+		rh.addConeCurvesFromCone(cone, name='firstHole')			#	(Point(20, 20, -5), 8, Point(20, 20, 15), 4, name='firstHole')
+		rh.addCylinderCurves(Point(20, 40, 5), 6, Point(20, 40, 15) , name='secondHole')
 
 		rh.write()
 

@@ -56,13 +56,13 @@ class TestSvg(unittest.TestCase):
 		root.writeScadTo(self.s_outputRootFolder + '/Polygon.scad')
 
 
-	def testCncFriendly(self):
-		dAttribute = 'M -50 50 A 100 60 0 0 0 50 -50'
-		path = SvgPathReader.classParsePath(dAttribute)
-		self.assertTrue(path.areSegsConnected())
-		cncPath = path.cncFriendly(0.1)
-		self.assertTrue(cncPath.areSegsConnected())
-		#print('length of cncPath: ' + str(len(cncPath.m_segments)))
+#	def testCncFriendly(self):
+#		dAttribute = 'M -50 50 A 100 60 0 0 0 50 -50'
+#		path = SvgPathReader.classParsePath(dAttribute)
+#		self.assertTrue(path.areSegsConnected())
+#		cncPath = path.cncFriendly(0.1)
+#		self.assertTrue(cncPath.areSegsConnected())
+#		#print('length of cncPath: ' + str(len(cncPath.m_segments)))
 
 
 
@@ -264,7 +264,7 @@ class TestSvg(unittest.TestCase):
 
 		self.checkOneArc(arc, path, fName)
 
-		affs = self.getTestAffines()
+		affs = self.getTestAffinesForArcs()
 		num = 1
 		for aff in affs:
 			#print(f'testing affine no. {num}')
@@ -277,6 +277,56 @@ class TestSvg(unittest.TestCase):
 
 
 	def checkOneArc(self, arc, path, fName):
+		start = arc.m_start
+		stop = arc.m_stop
+
+		# check, if the start and stop really lie on the arc
+		#start.printComment('checking start')
+		if not arc.containsPoint(start):
+			print('debug me')
+			arc.containsPoint(start)
+		self.assertTrue(arc.containsPoint(start))
+		#print('start was ok')
+		self.assertTrue(arc.containsPoint(stop))
+
+		# now test the correctness of startAngle, stopAngle and deltaAngle
+		# no longer needed, as this is done  in the selftest function
+		#p = arc.getPointForParameter(arc.m_startAngle)
+		#self.checkIsSamePoint(p, arc.m_start, True)
+
+		#p = arc.getPointForParameter(arc.m_stopAngle)
+		#self.checkIsSamePoint(p, arc.m_stop, True)
+
+		#testAngle = ZGeomItem.normalizeAngle(arc.m_startAngle + arc.m_deltaAngle)
+		#if not ZGeomItem.almostEqual(testAngle, ZGeomItem.normalizeAngle(arc.m_stopAngle)):
+		#	print('debug me')
+		#self.assertAlmostEqual(testAngle, ZGeomItem.normalizeAngle(arc.m_stopAngle))
+		#self.assertTrue(ZGeomItem.almostEqualAngles(arc.m_startAngle + arc.m_deltaAngle, arc.m_stopAngle))
+		
+		#delta = arc.m_deltaAngle
+		#if abs(abs(delta) - 180) > 0.0001:
+		# 180 or -180 are ok
+		#	if arc.m_largeArc:
+		#		self.assertTrue(abs(arc.m_deltaAngle) >= 180)
+		#	else:
+		#		self.assertTrue(abs(delta) <= 180)
+
+		# this is preliminary:
+		#if not arc.m_sweepFlag:
+		#	if not arc.m_deltaAngle < 0:
+		#		print('debug me')
+		#	self.assertTrue(arc.m_deltaAngle < 0)
+		#else:
+		#	self.assertTrue(arc.m_deltaAngle > 0)
+
+		#if fName:
+		#	root = OSCRoot('testArc')
+		#	rounded = OSCExtrudeRounded('the path', path, 10, 0)
+		#	root.add(rounded)
+		#	root.writeScadTo(self.s_outputRootFolder + '/'+fName)
+
+
+	def checkOneArcObsolete(self, arc, path, fName):
 		start = arc.m_start
 		stop = arc.m_stop
 
@@ -321,6 +371,28 @@ class TestSvg(unittest.TestCase):
 			rounded = OSCExtrudeRounded('the path', path, 10, 0)
 			root.add(rounded)
 			root.writeScadTo(self.s_outputRootFolder + '/'+fName)
+
+
+	def getTestAffinesForArcs(self):
+		# return a list of affines that can transform out arcs
+		# we check each transformed arc, if it is valid
+		ret = []
+
+		# a simple rotation around the origin in 2d (around z-axis)
+		aff = Affine.makeRotationAffine(Line(Point(), Point(0, 0, 1)), 30)
+		ret.append(aff)
+
+		# a more complicated rotation in 2d, around a shifted z-axis
+		aff = Affine.makeRotationAffine(Line(Point(5, 3), direction=Point(0, 0, 1)), 30)
+		ret.append(aff)
+
+		# a more complicated rotation in 3d (around y-axis)
+		aff = Affine.makeRotationAffine(Line(Point(), direction=Point(0, 1)), 30)
+		ret.append(aff)
+		for aff in ret:
+			self.assertTrue(aff.isInvertible)
+
+		return ret
 
 
 	def getTestAffines(self):

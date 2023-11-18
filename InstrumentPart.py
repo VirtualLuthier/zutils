@@ -8,7 +8,7 @@ import math
 from typing import List
 import logging
 
-from guitarparts.GMaterial import GMaterial
+from zutils.GMaterial import GMaterial
 from zutils.ZGeom import Point, Plane, Line, Circle2, ZGeomItem
 from zutils.OSCNode import OSCAbstract, OSCRoot, OSCCombination, OSCTransform, OSCExtrudeLin, OSCPath, OSCCallModule
 from zutils.ZMatrix import Matrix, Affine

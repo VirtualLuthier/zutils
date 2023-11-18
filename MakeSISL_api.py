@@ -120,6 +120,13 @@ void s1630(double [],int,double,int,int,int,SISLCurve **,int *);
 // create new curve:
 SISLCurve *newCurve(int,int,double *,double *,int,int,int);
 
+// createOffsetCurve:
+void s1360(SISLCurve *, double,  double,  double [], double, int, SISLCurve **, int *);
+
+// convertToListOfBezierCurves:
+void s1730(SISLCurve *, SISLCurve **, int *);
+
+
 //////////////////////////////////////////////////////////////////
 /////  surface stuff
 //////////////////////////////////////////////////////////////////

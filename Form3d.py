@@ -1,5 +1,5 @@
 """
-	Contains several classes of 3d bodies, that are delimited by surfaces:
+	Contains one class of 3d bodies (Form3d), that are delimited by surfaces:
 	- Form3d
 	- SurfaceAbstract
 	- SurfacePolygon

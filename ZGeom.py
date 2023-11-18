@@ -447,12 +447,14 @@ class Point(ZGeomItem):
 
 	def angleTo(self, otherPoint) -> float:
 		"""
-			return the angle between me and the other vector (arccos)
+			return the angle that I must be rotated, so that the other vector is achieved (positive means CCW)
 		"""
 		u1 = self.unit()
 		u2 = otherPoint.unit()
 		cos = u1 * u2
-		return math.degrees(math.acos(cos))
+		ret = math.degrees(math.acos(cos))
+		return ret
+
 
 
 	def isCollinear(self, otherPoint) -> bool:
@@ -574,6 +576,16 @@ class Cube(ZGeomItem):
 
 	def __str__(self) -> str:
 		return 'Cube(' + str(self.m_origin) + ', ' + str(self.m_corner) + ')'
+	
+
+	def printComment(self, comment, tabs=0, num=2):
+		self.printTabs(tabs)
+		print(f'{comment}: {str(self.rounded(num))}')
+
+
+	def rounded(self, num=2):
+
+		return Cube(self.m_origin.rounded(num), self.m_corner.rounded(num))
 
 
 ###################################################################
@@ -582,6 +594,7 @@ class Cube(ZGeomItem):
 
 class Rect(Cube):
 	"""
+		CAUTION: y1 > y2 means: y1 is higher than y2 - this is not normal !!!
 		Only useful in x-y-plane. Growing y means higher
 		Parallel to axes
 		names like "bottom" ... mean "greater y means higher"
@@ -900,7 +913,7 @@ class Ellipse2(ZGeomItem):
 
 class Ellipse3(ZGeomItem):
 	"""
-		Ellipse in 3d
+		Ellipse in 3d, diam1 is the longer diameter (or main axis)
 	"""
 	
 	def __init__(self, center, diam1=None, diam2=None, vert1=None, vert2=None):
@@ -936,73 +949,141 @@ class Ellipse3(ZGeomItem):
 		self.m_vert1 = vert1
 		self.m_vert2 = vert2
 
-		#self.m_rad1 = diam1.length()
-		#self.m_rad2 = diam2.length()
+		self.m_a = self.m_diam1.length()
+		self.m_b = self.m_diam2.length()		
+		self.m_exc = math.sqrt(self.m_a*self.m_a - self.m_b*self.m_b)
+		focusOffset = self.m_diam1.scaledTo(self.m_exc)
+		self.m_focus1 = self.m_center + focusOffset
+		self.m_focus2 = self.m_center - focusOffset
+
+		# ensure, that a 90 degree angle leads to self.m_center + self.m_diam2
+		testPoint = self.pointForAngle(90)
+		if not testPoint.isSameAs(self.m_vert2):
+			self.m_diam2 = - self.m_diam2
+			self.m_vert2 = self.m_center + self.m_diam2
+
 		self.m_cachedPoints = None
 
 
 	def copy(self):
-		return Ellipse3(self.m_center, self.m_diam1, self.m_diam2)
+		return Ellipse3(self.m_center.copy(), self.m_diam1.copy(), self.m_diam2.copy())
+	
+
+	def printComment(self, comment, tabs=0, rounded=2):
+		self.printTabs(tabs)
+		print(f'{comment}:\n')
+		self.m_center.printComment('center', tabs+1, rounded)
+		#self.printTabs(tabs + 1)
+		self.m_diam1.printComment('diam1', tabs + 1, rounded)
+		self.m_diam2.printComment('diam2', tabs + 1, rounded)
+		#print(f'diam1: {str(round(self.m_radiusX))}, radiusY: {str(round(self.m_radiusY, rounded))}, rot: {str(round(self.m_rotated, rounded))}')
+
 
 
 	def getNormale(self):
 		return self.m_diam1.crossProduct(self.m_diam2).unit()
+	
+
+	def getRadii(self):
+		return (self.m_diam1.length(), self.m_diam2.length())
 
 
-	def pointForParam(self, degrees):
+	def pointForAngle(self, degrees):
 		"""
 			Return the point on me with the given angle. Start: my vert1, running over my vert2
 		"""
-		angle = (degrees / 180) * math.pi
+		angle = math.radians(degrees)
 		return self.m_center + self.m_diam1.scaledBy(math.cos(angle)) + self.m_diam2.scaledBy(math.sin(angle))
 
 
-	def tangentForParam(self, degrees):
+	def tangentForAngle(self, degrees):
 		"""
-			Return the tangent (not normalized) at a agiven parameter
+			Return the tangent (not normalized) at a agiven angle
 		"""
-		angle = (degrees / 180) * math.pi
+		angle = math.radians(degrees)
 		# this is simply the derivative of the point formula with respect to angle
 		return -self.m_diam1.scaledBy(math.sin(angle)) + self.m_diam2.scaledBy(math.cos(angle))
 
 
-	def provideCachedPoints(self):
-		if self.m_cachedPoints is not None:
-			return
-		num = 360
-		step = 360.0 / num
-		cache = [None] * num
-		for ii in range(num):
-			cache[ii] = self.pointForParam(step * ii)
-		self.m_cachedPoints = cache
+	#def provideCachedPoints(self):
+	#	if self.m_cachedPoints is not None:
+	#		return
+	#	num = 360
+	#	step = 360.0 / num
+	#	cache = [None] * num
+	#	for ii in range(num):
+	#		cache[ii] = self.pointForParam(step * ii)
+	#	self.m_cachedPoints = cache
 
-	def paramForPoint(self, point):
-		"""
-			Return the parameter value that leads to this point (if exists) in range between 0 and 359.999
-		"""
-		myLambda = lambda angle: point.distanceOf(self.pointForParam(angle))
-		self.provideCachedPoints()
-		minDist = 100000000
-		minIdx = -1
-		idx = 0
-		for p in self.m_cachedPoints:
-			dist = p.distanceOf(point)
-			if dist < minDist:
-				minDist = dist
-				minIdx = idx
-			idx += 1
-		print(f'minIdx = {minIdx}, min = {minDist}')
 
-		#result = minimize_scalar(myLambda, bounds=(0, 360), method='bounded')
-		result = minimize_scalar(myLambda, bounds=(idx - 1, idx + 1), method='bounded')
-		#print(result)
-		if self.almostZero(result.fun):
-			ret = result.x
-			if self.almostEqual(ret, 360):
-				ret = 0
-			return ret
-		return math.nan
+	def angleForPoint(self, point):
+		'''
+			Return the angle between the vector from center to point and my main axis
+		'''
+		if not self.containsPoint(point):
+			print(f'Ellipse3::angleForPoint cannot find angle for wrong point {point}')
+			return None
+		offset = point - self.m_center
+		angle = self.m_diam1.angleTo(offset)
+		testPoint = self.pointForAngle(angle)
+		if testPoint.isSameAs(point):
+			return angle
+		dist1 = testPoint.distanceOfPoint(point)
+		test1 = testPoint
+		angle = 360 - angle
+		testPoint = self.pointForAngle(angle)
+		test2 = testPoint
+		if testPoint.isSameAs(point):
+			return angle
+		dist2 = testPoint.distanceOfPoint(point)
+		#self.printComment('ellipse3')
+		numerical = self.tryAngleNumerically(point)
+		if numerical is not None:
+			angle = ZGeomItem.normalizeAngle(numerical)
+			testPoint = self.pointForAngle(angle)
+			dist3 = testPoint.distanceOfPoint(point)
+			if testPoint.isSameAs(point):
+				return angle
+		raise Exception(f'Ellipse3::angleForPoint cannot find angle for {point}, dist1={dist1}, test1={test1} dist2={dist2}, test2={test2}')
 
+
+	def tryAngleNumerically(self, point):
+		func = lambda t: point.distanceOfPoint(self.pointForAngle(t))
+		found = minimize_scalar(func, bounds=(0,180))
+		if found.fun < ZGeomItem.s_wantedAccuracy:
+			return found.x
+		found = minimize_scalar(func, (180,360))
+		if found.fun < ZGeomItem.s_wantedAccuracy:
+			return found.x
+		#print(found)
+		return None
+
+	# def paramForPointObsolete(self, point):
+	# 	"""
+	# 		Return the parameter value that leads to this point (if exists) in range between 0 and 359.999
+	# 	"""
+	# 	myLambda = lambda angle: point.distanceOf(self.pointForParam(angle))
+	# 	self.provideCachedPoints()
+	# 	minDist = 100000000
+	# 	minIdx = -1
+	# 	idx = 0
+	# 	for p in self.m_cachedPoints:
+	# 		dist = p.distanceOf(point)
+	# 		if dist < minDist:
+	# 			minDist = dist
+	# 			minIdx = idx
+	# 		idx += 1
+	# 	print(f'minIdx = {minIdx}, min = {minDist}')
+
+	# 	#result = minimize_scalar(myLambda, bounds=(0, 360), method='bounded')
+	# 	result = minimize_scalar(myLambda, bounds=(idx - 1, idx + 1), method='bounded')
+	# 	#print(result)
+	# 	if self.almostZero(result.fun):
+	# 		ret = result.x
+	# 		if self.almostEqual(ret, 360):
+	# 			ret = 0
+	# 		return ret
+	# 	return math.nan
 
 
 	def isSameAs(self, otherEllipse):
@@ -1025,14 +1106,29 @@ class Ellipse3(ZGeomItem):
 
 	def containsPoint(self, point):
 		"""
-			return True, if point lies on me, else False
+			return True, if point lies on me, else False, should be reprogrammed!!
 		"""
-		test = self.paramForPoint(point)
-		return not math.isnan(test)
+		if not self.getPlane().containsPoint(point):
+			return
+		return self.almostZero(self.m_focus1.distanceOfPoint(point) + self.m_focus2.distanceOfPoint(point) - 2 * self.m_a)
 
 
 	def isCircle(self):
 		return self.almostEqual(self.m_diam1.length(), self.m_diam2.length())
+	
+
+	def getPlane(self):
+		'''
+			return a Plane that contains me
+		'''
+		return Plane(self.m_center, self.m_vert1, self.m_vert2)
+
+
+	def getFocusPoints(self):
+		"""
+			return an array with my focus points
+		"""
+		return [self.m_focus1, self.m_focus2]
 
 
 ##############################################################
@@ -1042,6 +1138,9 @@ class Ellipse3(ZGeomItem):
 class Line(ZGeomItem):
 	"""
 		A line in 3d
+		Can be regarded in 2 ways:
+		- line through p1 and p2
+		- line through p1 and with direction direction
 	"""
 	def __init__(self, p1, p2=None, direction=None):
 		super().__init__()
@@ -1079,6 +1178,15 @@ class Line(ZGeomItem):
 
 	def pointForLambda(self, lambdaValue) -> Point:
 		return self.m_p1 + self.m_direction.scaledBy(lambdaValue)
+	
+
+	def lambdaForPoint(self, point):
+		if not self.containsPoint(point):
+			return None
+		dist = self.m_p1.distanceOfPoint(point)
+		theLambda = dist / self.m_direction.length()
+		cand = self.pointForLambda(theLambda)
+		return theLambda if cand.isSameAs(point) else -theLambda
 
 
 	def __str__(self) -> str:

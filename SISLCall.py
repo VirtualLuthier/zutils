@@ -182,7 +182,7 @@ class SislObjectHolder:
 		ret = stat[0]
 		if ret == 0:
 			return
-		print(f'Error in {msg} [{str(ret)}] -----------------')
+		print(f'Error in {msg} [{ret}] ############################')
 
 
 ###################################################################
@@ -194,7 +194,10 @@ class SislCurveHolder(SislObjectHolder):
 		super().__init__(structPtr)
 		self.m_startPar = -1
 		self.m_endPar = -1
-		self.getParameterRange()
+		if self.m_structPtr	!= sl.ffi.NULL:
+			self.getParameterRange()
+		else:
+			raise Exception('SislCurveHolder: got invalid curve pointer')
 
 
 	@classmethod
@@ -315,6 +318,19 @@ class SislCurveHolder(SislObjectHolder):
 		self.checkStat(stat, 'joinTwoCurves')
 		structPtr = theStruct[0]
 		return SislCurveHolder(structPtr)
+	
+	#	sislCurve.createOffsetCurve(10.0, 2.0, Point(0, 0, 1))
+	def createOffsetCurve(self, offset, epsge, normal, maxD=0.0, dim=3):
+		'''
+			create a curve that is parallel to me
+		'''
+		theStruct = sl.ffi.new('SISLCurve*[]', 1)
+		theStruct[0] = sl.ffi.NULL
+		stat = self.statItem()
+		sl.lib.s1360(self.m_structPtr, offset,  epsge,  self.makePointArray(normal), maxD, dim, theStruct, stat)
+		self.checkStat(stat, 'createOffsetCurve')
+		structPtr = theStruct[0]
+		return SislCurveHolder(structPtr)
 
 
 #############
@@ -324,17 +340,24 @@ class SislCurveHolder(SislObjectHolder):
 		"""
 			Dump the contents of the SISLCurve struct in a readable form
 		"""
+		print (f'Curve: ----------  {name} ---------------')
+		#print(f'self.m_structPtr: {self.m_structPtr}')
+		if self.m_structPtr	== sl.ffi.NULL:	# is a NULL pointer
+			print(f'curve is empty: {name} ###################')
+			return
+		#print('self.m_structPtr: {self.m_structPtr}')
+
 		curve = self.m_structPtr[0]
-		print('please change print format to f-strings')
-		print ('Curve: ----------' + name + '---------------')
+
+		#print(f'*{curve}*')
 		curveKinds = ['Unknown', 'Polynomial B-spline curve', 'Rational B-spline curve', 'Polynomial Bezier curve', 'Rational Bezier curve']
 		curveKind = curveKinds[curve.ikind]
-		print('orderOfCurve:	' + str(curve.ik))
+		print(f'orderOfCurve:	{curve.ik}')
 		print('numOfVertices:	' + str(getattr(curve, 'in')))
-		print('kindOfCurve:	' + curveKind)
+		print(f'kindOfCurve:	{curveKind}')
 		print('open/closed:	' + self.getOpenString(curve, 'cuopen'))
-		print('startPar:	' + str(self.m_startPar))
-		print('endPar:		' + str(self.m_endPar))
+		print(f'startPar:	{self.m_startPar}')
+		print(f'endPar:		{self.m_endPar}')
 
 
 	def free(self) -> None:
@@ -604,19 +627,18 @@ class SislSurfaceHolder(SislObjectHolder):
 		surface = self.m_structPtr[0]
 		surfaceKinds = ['Unknown', 'Polynomial B-spline tensor-product', 'Rational B-spline tensor-product', 'Polynomial Bezier tensor-product', 'Rational Bezier tensor-product']
 		surfaceKind = surfaceKinds[surface.ikind]
-		print('please change print format to f-strings')
-		print ('Surface: ---------' + name + '------------------')
-		print('orderOfSurf.1:	' + str(surface.ik1))
-		print('orderOfSurf.2:	' + str(surface.ik2))
-		print('numOfVertices1:	' + str(surface.in1))
-		print('numOfVertices2:	' + str(surface.in2))
-		print('kindOfSurface:	' + surfaceKind)
+		print (f'Surface: ---------{name}------------------')
+		print(f'orderOfSurf.1:	{surface.ik1}')
+		print(f'orderOfSurf.2:	{surface.ik2}')
+		print(f'numOfVertices1:	{surface.in1}')
+		print(f'numOfVertices2:	{surface.in2}')
+		print(f'kindOfSurface:	{surfaceKind}')
 		print('open/closed1:	' + self.getOpenString(surface, 'cuopen_1'))
 		print('open/closed2:	' + self.getOpenString(surface, 'cuopen_2'))
-		print('startPar1:	' + str(self.m_startPar1))
-		print('endPar1:	' + str(self.m_endPar1))
-		print('startPar2:	' + str(self.m_startPar2))
-		print('endPar2:	' + str(self.m_endPar2))
+		print(f'startPar1:	{self.m_startPar1}')
+		print(f'endPar1:	{self.m_endPar1}')
+		print(f'startPar2:	{self.m_startPar2}')
+		print(f'endPar2:	{self.m_endPar2}')
 
 
 	def getSurfacePoints(self, numU, numV=math.nan) -> list[list[Point]]:

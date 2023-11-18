@@ -18,7 +18,7 @@ import rhino3dm._rhino3dm as rhinoInternal
 import matplotlib.colors as matcolors
 
 
-from zutils.ZGeom import Point
+from zutils.ZGeom import Point, Circle3
 from zutils.ZMatrix import Affine
 
 
@@ -322,9 +322,9 @@ class ZRhinoFile:
 
 	def addFullCircle(self, center, radius, normal=None, startDir=None, name=None):
 		"""
-			Create and add a full circle curve. If normal == None in x-y-plain.
+			Create and add a full circle curve. If normal == None in x-y-plane.
 			startDir is a Vector from center to the startPoint(perpendicular to normal, important for lofting)
-			In reality creates a polycurve with 2 half circles. If polyCurve is given, add to it
+			In reality creates a polycurve with 2 half circles.
 		"""
 		if normal is None:
 			normal = Point(0, 0, 1)
@@ -384,9 +384,20 @@ class ZRhinoFile:
 		self.addLine(point, point2, name=name)
 
 
-	def addConeCurvesOld(self, start, radius1, stop, radius2, name=None):
+	def addObliqueConeCircles(self, circle1:Circle3, circle2:Circle3, startDir:Point, name=None):
+		'''
+			Add 2 circles making up an oblique cone. Mostly normal1=normal2. startDir must lie in each of the circle's plane.
+			Is so complicated to enable clean lofting
+		'''
+		if not circle1.containsPoint(circle1+startDir) or not circle2.containsPoint(circle2+startDir):
+			raise Exception(f'ZRhinoFile::addObliqueConeCircles: both circles must contain center+startDir')
+		self.addFullCircle(circle1.m_center, circle1.m_radius, circle1.m_normal, startDir=startDir, name=name + '-1')
+		self.addFullCircle(circle2.m_center, circle2.m_radius, circle2.m_normal, startDir=startDir, name=name + '-2')
+
+
+	def addConeCurvesFromPoints(self, start, radius1, stop, radius2, name=None):
 		"""
-			Add 2 circles that can be lofted to a cone
+			Add 2 circles that can be lofted to a cone, start and stop lie on cone axis
 		"""
 		normal = stop - start
 		startDir = normal.anyPerpendicularPoint()
@@ -394,7 +405,7 @@ class ZRhinoFile:
 		self.addFullCircle(stop, radius2, normal, startDir=startDir, name=name + '-2')
 
 
-	def addConeCurves(self, cone, name=None):
+	def addConeCurvesFromCone(self, cone, name=None):
 		"""
 			Add 2 circles that can be lofted to this cone (or cylinder)
 			(take the circles around cone.m_p1, ...m_p2)
@@ -411,11 +422,11 @@ class ZRhinoFile:
 		self.addFullCircle(stop, r2, direction, startDir=startDir, name=name + '-2')
 
 
-	def addCylinderCurvesOld(self, start, radius, stop, name=None):
+	def addCylinderCurves(self, start, radius, stop, name=None):
 		"""
 			Add 2 circles that can be lofted to a cylinder
 		"""
-		self.addConeCurvesOld(start, radius, stop, radius, name=name)
+		self.addConeCurvesFromPoints(start, radius, stop, radius, name=name)
 
 
 	def makeAttributes(self, name=None):
@@ -479,7 +490,7 @@ class ZRhinoFile:
 	@classmethod
 	def getColorAsTuple(cls, colorNameOrTuple):
 		"""
-			Return a tuple (r, g, b, a) 0..255 Use strings from matplotlib
+			Return a tuple (r, g, b, a) 0..255 Use strings from matplotlib.colors
 		"""
 		if isinstance(colorNameOrTuple, list) or isinstance(colorNameOrTuple, tuple):
 			if len(colorNameOrTuple) == 4:
@@ -489,7 +500,7 @@ class ZRhinoFile:
 		colorName = colorNameOrTuple.lower()
 		color = matcolors.cnames.get(colorName, None)
 		if color is None:
-			logging.error('ZRhinoFile:getColorAsTuple: color not found: %s', colorName)
+			logging.error('ZRhinoFile:getColorAsTuple: color name not found in matcolors.cnames: %s', colorName)
 			return (0, 0, 0, 255)
 		rs = int(color[1:3], 16)
 		gs = int(color[3:5], 16)

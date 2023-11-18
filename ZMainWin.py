@@ -34,14 +34,14 @@ class ZMainWindow(QMainWindow):
 		- main menu support
 	"""
 
-	s_app = None
-	s_standardStoreFolder = '.'	# should be initialized by subclass
+	m_app = None
+	m_standardStoreFolder = '.'	# should be initialized by subclass
 
 
 	def __init__(self):
 		super().__init__()
-		ZMainWindow.s_app = QApplication.instance()
-		#ZMainWindow.s_app.focusChanged.connect(self.onFocusChanged)
+		ZMainWindow.m_app = QApplication.instance()
+		#ZMainWindow.m_app.focusChanged.connect(self.onFocusChanged)
 		self.m_changedFlag = False
 
 		self.m_allWidgetDescriptors = []
@@ -55,6 +55,10 @@ class ZMainWindow(QMainWindow):
 		self.m_menuFile = None
 
 		self.m_currentEmphasizedWidget = None
+
+
+	def attributeHasChanged(self):
+		self.m_changedFlag = True
 
 
 	@classmethod
@@ -162,7 +166,7 @@ class ZMainWindow(QMainWindow):
 			return
 		fName = self.makeFileName(title)
 		#print(fName)
-		folder = self.s_standardStoreFolder + '/' + fName
+		folder = self.m_standardStoreFolder + '/' + fName
 		file = folder + '.xml'
 		if os.path.isdir(folder):
 			self.notify('Generics.Menu.File.Error.FolderExists', [folder])
@@ -182,7 +186,7 @@ class ZMainWindow(QMainWindow):
 		if not self.okToClose():
 			return
 		caption = self.tr('Generics.Menu.File.Open.Title')
-		folder = self.s_standardStoreFolder
+		folder = self.m_standardStoreFolder
 		selected = QFileDialog.getOpenFileName(self, caption, folder, '*.xml')
 		fileName = selected[0]
 		if len(fileName) == 0:
@@ -221,7 +225,7 @@ class ZMainWindow(QMainWindow):
 		if not self.checkForCurrentModel():
 			return
 		caption = self.tr('Generics.Menu.File.SaveAs.Title')
-		oldFile = self.s_standardStoreFolder + '/something.xml' if self.m_currentFile is None else self.m_currentFile
+		oldFile = self.m_standardStoreFolder + '/something.xml' if self.m_currentFile is None else self.m_currentFile
 		selected = QFileDialog.getSaveFileName(self, caption, oldFile, '*.xml')
 		fileName = selected[0]
 		if len(fileName) == 0:
@@ -282,7 +286,7 @@ class ZMainWindow(QMainWindow):
 		"""
 			create and install the wanted translator in the qt app
 		"""
-		app = self.s_app
+		app = self.m_app
 		if not os.path.exists(nlsName):
 			raise Exception('nls file not found: ' + nlsName)
 		translator = QTranslator(app)	# this argument (app) is very important !
@@ -353,7 +357,7 @@ class ZMainWindow(QMainWindow):
 			Translate the symbol and insert additional strings, if needed.
 			QT translation is said to be unstable.
 		"""
-		ret = cls.s_app.tr(symbol)
+		ret = cls.m_app.tr(symbol)
 		if params is None:
 			params = []
 		length = len(params)
@@ -396,6 +400,7 @@ class ZMainWindow(QMainWindow):
 		"""
 			Create a qt double input and connect to widgetDescriptor
 		"""
+		
 		descriptor.m_editor = self
 		lineEdit = QLineEdit()
 
@@ -415,7 +420,15 @@ class ZMainWindow(QMainWindow):
 			validator.setLocale(QLocale.c())		# use the "neutral" locale!
 			lineEdit.setValidator(validator)
 		parent.addRow(self.tr(symbol), lineEdit)
+
+		# i have no idea, why the first does not wor, but the second does !!!!!!!!!!
 		lineEdit.textChanged.connect(descriptor.valueChanged)
+		#lineEdit.textChanged.connect(lambda  text: descriptor.valueChanged(text))
+
+		#lineEdit.textEdited.connect(descriptor.valueChanged)
+		#print(f'descriptor: {descriptor}')
+		#lineEdit.textChanged.connect(descriptor.m_owner)
+		#print('createDoubleLineInput: ')
 		descriptor.m_widget = lineEdit
 		self.m_allWidgetDescriptors.append(descriptor)
 
