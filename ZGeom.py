@@ -35,6 +35,7 @@ class ZGeomItem:
 	s_mmAccuracy = 0.001
 	s_wantedAccuracy = 0.001
 	s_wantedSquaredAccuracy = 0.000001
+	s_originIsTopLeft = True			 # increasing y values go to bottom (influences clockwise/counterclockwise) - value False currently not tested!!
 
 	@classmethod
 	def almostEqual(cls, f1, f2) -> bool:
@@ -453,6 +454,7 @@ class Point(ZGeomItem):
 		u2 = otherPoint.unit()
 		cos = u1 * u2
 		ret = math.degrees(math.acos(cos))
+
 		return ret
 
 
@@ -971,7 +973,7 @@ class Ellipse3(ZGeomItem):
 
 	def printComment(self, comment, tabs=0, rounded=2):
 		self.printTabs(tabs)
-		print(f'{comment}:\n')
+		print(f'{comment}:')
 		self.m_center.printComment('center', tabs+1, rounded)
 		#self.printTabs(tabs + 1)
 		self.m_diam1.printComment('diam1', tabs + 1, rounded)
@@ -1639,11 +1641,11 @@ class Polygon(ZGeomItem):
 
 	# see https://stackoverflow.com/questions/32274127/how-to-efficiently-determine-the-normal-to-a-polygon-in-3d-space
 	# c is a point outside the polygon, from which you look at it to see the orientation
-	def isClockwise(self, c) -> bool:
+	def isClockWise(self, c) -> bool:
 		self.area()
 		if self.m_vectorArea.length() == 0:
-			print('Polygon: cannot know if isClockwise: area = 0')
-			raise Exception('Polygon: cannot know if isClockwise: area = 0')
+			print('Polygon: cannot know if isClockWise: area = 0')
+			raise Exception('Polygon: cannot know if isClockWise: area = 0')
 			return None
 		theSum = self.m_vectorArea.unit()
 		plane = Plane(self.m_center, normal=theSum)
@@ -1656,7 +1658,7 @@ class Polygon(ZGeomItem):
 		return True
 
 
-	def makeClockwise(self, pointOutside, direction=True) -> int:
+	def makeClockWise(self, pointOutside, direction=True) -> int:
 		"""
 			returns 0, if the orientation is ok, possibly after removing identical points
 			returns 1, if the orientation could be achieved by reversing or by removing identical points
@@ -1665,11 +1667,11 @@ class Polygon(ZGeomItem):
 		if len(self.m_points) < 3:
 			return 2
 		try:
-			test = self.isClockwise(pointOutside)
+			test = self.isClockWise(pointOutside)
 		except Exception:
 			if not self.remove2IdenticalPoints():
 				return 2
-			return self.makeClockwise(pointOutside, direction) 
+			return self.makeClockWise(pointOutside, direction) 
 		if test == direction:
 			return 0
 		self.m_points.reverse()

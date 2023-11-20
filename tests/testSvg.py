@@ -15,6 +15,7 @@ from zutils.ZGeom import ZGeomItem, Point, Line
 from zutils.SvgReader import SvgPathReader
 from zutils.ZPath import ZArcSegment
 from zutils.ZMatrix import Matrix, Affine
+from zutils.ZGeomHelper import ZGeomHelper
 
 from zutils.OSCNode import OSCRoot, OSCExtrudeRounded
 
@@ -177,10 +178,10 @@ class TestSvg(unittest.TestCase):
 
 		self.assertTrue(path.isClosed())
 
-		path.makeClockwise(False)
-		self.assertFalse(path.isClockwise())
+		path.makeClockWise(False)
+		self.assertFalse(path.isClockWise())
 		path.reverse()
-		self.assertTrue(path.isClockwise())
+		self.assertTrue(path.isClockWise())
 
 
 	def test_implicitLines(self):
@@ -195,6 +196,88 @@ class TestSvg(unittest.TestCase):
 		self.assertEqual(len(path.m_segments), 7)
 		self.assertTrue(path.areSegsConnected())
 		self.assertTrue(path.isClosed())
+
+
+	def test_arcFlags(self):
+		# first arc: around (0,0), CW
+		# second arc: around (100,100), CW
+		# Please note, that we have the origin at top left (y grows to bottom) - ZGeomItem.s_originIsTopLeft = False currently not tested!
+
+		CW = 1	# means clockwise
+		p1 = '100 0'
+		p2 = '0 100'
+		radii = '100 100 0'	# rx, ry, x-angle
+		lArc = 0	# take short arc
+		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
+		path = SvgPathReader.classParsePath(dAttribute)
+		self.checkPathFlags(path, Point(), Point(100, 100), True, 90)
+
+		CW = 0 # means CCW
+		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
+		path = SvgPathReader.classParsePath(dAttribute)
+		self.checkPathFlags(path, Point(100, 100), Point(), False, -90)
+
+		lArc = 1	# take long arc
+		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
+		path = SvgPathReader.classParsePath(dAttribute)
+		self.checkPathFlags(path, Point(), Point(100, 100), False, -270)
+
+		CW = 1	# additionally set CW
+		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
+		path = SvgPathReader.classParsePath(dAttribute)
+		self.checkPathFlags(path, Point(100, 100), Point(), True, 270)
+
+
+	def checkPathFlags(self, path, c1, c2, clockWise, delta):
+		#path.printComment('the path')
+		seg1 = path.m_segments[0]
+		seg2 = path.m_segments[1]
+		self.checkIsSamePoint(c1, seg1.m_center)
+		self.checkIsSamePoint(c2, seg2.m_center)
+		self.assertEqual(seg1.isClockWise(), clockWise)
+		self.assertEqual(seg2.isClockWise(), clockWise)
+		self.assertAlmostEqual(seg1.m_deltaAngle, delta, 5)
+		self.assertAlmostEqual(seg2.m_deltaAngle, delta, 5)
+
+
+	def test_angleBetween2(self):
+		'''
+			Please note, that we have the origin at top left (y grows to bottom) - ZGeomItem.s_originIsTopLeft = False currently not tested!
+		'''
+		center = Point()
+		point1 = Point(1)
+		cw = True
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(1), cw), 0)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(1, 1), cw), 45)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(0, 1), cw), 90)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(-1, 1), cw), 135)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(-1), cw), 180)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(0, -1), cw), 270)
+
+		cw = False
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(1), cw), 0)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(1, 1), cw), 315)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(0, 1), cw), 270)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(-1, 1), cw), 225)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(-1), cw), 180)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(0, -1), cw), 90)
+
+		point1 = Point(0, 1)
+		cw = True
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(1), cw), 270)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(1, 1), cw), 315)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(0, 1), cw), 0)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(-1, 1), cw), 45)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(-1), cw), 90)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(0, -1), cw), 180)
+
+		cw = False
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(1), cw), 90)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(1, 1), cw), 45)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(0, 1), cw), 0)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(-1, 1), cw), 315)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(-1), cw), 270)
+		self.assertAlmostEqual(ZGeomHelper.angleBetween2(center, point1, Point(0, -1), cw), 180)
 
 
 ##################################################

@@ -328,7 +328,7 @@ class ZPathSegment:
 				newSeg = ZLineSegment(segPoints[0], segPoints[-1])
 			else:
 				rad = currentCircle.m_radius
-				newSeg = ZArcSegment(rad, rad, 0, segPoints[0], segPoints[-1], False, poly.isClockwise(Point(0, 0, 1)))
+				newSeg = ZArcSegment(rad, rad, 0, segPoints[0], segPoints[-1], False, poly.isClockWise(Point(0, 0, 1)))
 		segList.append(newSeg)
 
 
@@ -728,11 +728,11 @@ class ZBezier3Segment(ZPathSegment):
 		node.set('handleStop', self.m_handleStop.xmlCoords())
 
 
-	def isClockwise(self):
+	def isClockWise(self):
 		# seen from (0, 0, 1)
 		points = [self.m_start, self.m_handleStart, self.m_handleStop, self.m_stop]
 		poly = Polygon(points)
-		return poly.isClockwise(Point(0, 0, 1))
+		return poly.isClockWise(Point(0, 0, 1))
 
 
 	def asNurbsDescription(self) -> list[Point]:
@@ -837,11 +837,11 @@ class ZBezier2Segment(ZPathSegment):
 		node.set('handle', self.m_handle.xmlCoords())
 
 
-	def isClockwise(self):
+	def isClockWise(self):
 		# seen from (0, 0, 1)
 		points = [self.m_start, self.m_handle, self.m_stop]
 		poly = Polygon(points)
-		return poly.isClockwise(Point(0, 0, 1))
+		return poly.isClockWise(Point(0, 0, 1))
 
 ####################################################
 ####################################################
@@ -1023,15 +1023,18 @@ class ZArcSegment(ZPathSegment):
 		ZGeomItem.printNumRounded('rx', self.m_rx, tabs, rounded)
 		ZGeomItem.printNumRounded('ry', self.m_ry, tabs, rounded)
 		#ZGeomItem.printNumRounded('x-angle', self.m_xAngle, tabs, rounded)
-		ZGeomItem.printStringTabbed(f'large:', str(self.m_largeArc), tabs)
-		ZGeomItem.printStringTabbed('clockwise', self.isClockwise(), tabs)
+		ZGeomItem.printStringTabbed('x-angle', '???', tabs)
+		ZGeomItem.printStringTabbed(f'large', str(self.m_largeArc), tabs)
+		ZGeomItem.printStringTabbed('clockwise', self.isClockWise(), tabs)
 		ZGeomItem.printNumRounded('startAngle', self.m_startAngle, tabs, rounded)
 		ZGeomItem.printNumRounded('stopAngle', self.m_stopAngle, tabs, rounded)
 		ZGeomItem.printNumRounded('deltaAngle', self.m_deltaAngle, tabs, rounded)
 		self.m_ellipse.printComment('ellipse', tabs)
 
 
-	def isClockwise(self):
+	def isClockWise(self):
+		if ZGeomItem.s_originIsTopLeft:
+			return self.m_deltaAngle > 0
 		return self.m_deltaAngle < 0
 
 
@@ -1045,7 +1048,7 @@ class ZArcSegment(ZPathSegment):
 			return the angle between the positive x-axis and (point - center)
 		'''
 		angle = self.m_ellipse.angleForPoint(point)
-		return Point(1).angleForPoint(point)
+		return Point(1).angleTo(point)
 
 
 	def getPointForParameter(self, angle):
@@ -1355,23 +1358,23 @@ class ZPath:
 		return ret
 
 
-	def isClockwise(self):
+	def isClockWise(self):
 		# seen from (0, 0, 1)
 		points = [x.m_start for x in self.m_segments]
 		if len(points) < 3:
 			for seg in self.m_segments:
 				if type(seg).__name__ == 'ZArcSegment':
-					return seg.m_sweepClockWise
+					return seg.isClockWise()
 				if isinstance(seg, ZBezier3Segment):
-					return seg.isClockwise()
-			print('cannot get isClockwise() for less than 3 points !!!!!!!!!!!!!!!!!!!!!!!')
+					return seg.isClockWise()
+			print('cannot get isClockWise() for less than 3 points !!!!!!!!!!!!!!!!!!!!!!!')
 			return None
 		poly = Polygon(points)
-		return poly.isClockwise(Point(0, 0, 1))
+		return poly.isClockWise(Point(0, 0, 1))
 
 
-	def makeClockwise(self, what=True):
-		if self.isClockwise() == what:
+	def makeClockWise(self, what=True):
+		if self.isClockWise() == what:
 			return
 		self.reverse()
 
@@ -1509,17 +1512,17 @@ class ZPath:
 				lastSeg = self.m_segments[-1]
 			else:
 				lastSeg = self.m_segments[ii-1]
-			connectible = ' NOT '
+			connectible = 'NOT '
 			if self.areSegsConnectable(lastSeg, seg):
 				connectible = ''
 				
 			seg.printComment('segment ' + str(ii), tabs + 1, rounded)
 			self.printTabs(tabs + 2)
-			print(f'segment is {connectible} connected from previous segment')
+			print(f'segment is {connectible}connected from previous segment')
 			ii = ii + 1
 
 		ZGeomItem.printStringTabbed('path is closed', self.isClosed(), tabs)
-		ZGeomItem.printStringTabbed('orientation is clockwise', self.isClockwise(), tabs)
+		ZGeomItem.printStringTabbed('orientation is clockwise', self.isClockWise(), tabs)
 
 
 	def extractFullEllipses(self):
@@ -1605,7 +1608,7 @@ class ZPath:
 	def xmlAddTo(self, parent, tag='path'):
 		path = ET.SubElement(parent, tag)
 		path.set('closed', str(self.isClosed()))
-		path.set('clockwise', str(self.isClockwise()))
+		path.set('clockwise', str(self.isClockWise()))
 		for seg in self.m_segments:
 			seg.xmlAddTo(path)
 

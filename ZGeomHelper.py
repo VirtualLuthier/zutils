@@ -23,7 +23,7 @@ class ZGeomHelper:
 		Only class functions are provided.
 	"""
 	@classmethod
-	def angleBetween(cls, center, point1, point2, cw):
+	def angleBetween2(cls, center, point1, point2, cw):
 		"""
 			return a positive angle between 0 and 360
 			How many degrees must i go from center->p1 to center->p2 clockwise (or ccw)
@@ -33,6 +33,8 @@ class ZGeomHelper:
 		p2 = (point2 - center)
 
 		angle = Affine.fullAngleBetween2d(p1, p2)
+		if ZGeomItem.s_originIsTopLeft:
+			angle = - angle
 		if cw:
 			return ZGeomItem.normalizeAngle(-angle)
 		if angle == 0:
@@ -292,120 +294,5 @@ class ZGeomHelper:
 	
 
 ##############################################################
-#	helpers for Elliptic arcs
-
-	# @classmethod
-	# def vectorAngle2(cls, u, v):
-	# 	'''
-	# 		return the angle (in degrees) between 2 2-dim vectors
-	# 	'''
-	# 	d = math.hypot(*u) * math.hypot(*v)
-	# 	if d == 0:
-	# 		return 0
-	# 	c = (u[0] * v[0] + u[1] * v[1]) / d
-	# 	if c < -1:
-	# 		c = -1
-	# 	elif c > 1:
-	# 		c = 1
-	# 	s = u[0] * v[1] - u[1] * v[0]
-	# 	return math.degrees(math.copysign(math.acos(c), s))
-
-
-	# @classmethod
-	# def calculateArcEllipse(cls, rx, ry, pStart, pStop, xAngle, largeArc, sweepClocWise): 		# , x1, y1, x2, y2, fA, fS, rx, ry, phi=0):
-	# 	'''
-	# 	Calculate the ellipse of a arc path segmentfrom the svg arguments
-	# 	makes only sense in the x-y-plane (2d)
-	# 	Note that we have rotated to be axis parallel (so we reduced phi to zero outside)
-	# 	See http://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes F.6.5
-	# 	'''
-
-	# 	x1 = pStart.m_x
-	# 	y1 = pStart.m_y
-	# 	x2 = pStop.m_x
-	# 	y2 = pStop.m_y
-
-	# 	fA = 1 if largeArc else 0
-	# 	fs = 1 if sweepClocWise else 0
-
-	# 	phi = xAngle
-
-	# 	rx = math.fabs(rx)
-	# 	ry = math.fabs(ry)
-
-	# 	# step 1
-	# 	if phi:
-	# 		# this should be obsolete, as we have transformed the ellipse to be axis parallel
-	# 		phi_rad = math.radians(phi)
-	# 		sin_phi = math.sin(phi_rad)
-	# 		cos_phi = math.cos(phi_rad)
-	# 		tx = 0.5 * (x1 - x2)
-	# 		ty = 0.5 * (y1 - y2)
-	# 		x1d = cos_phi * tx - sin_phi * ty
-	# 		y1d = sin_phi * tx + cos_phi * ty
-	# 	else:
-	# 		x1d = 0.5 * (x1 - x2)
-	# 		y1d = 0.5 * (y1 - y2)
-
-	# 	# step 2
-	# 	# we need to calculate
-	# 	# (rx*rx*ry*ry-rx*rx*y1d*y1d-ry*ry*x1d*x1d)
-	# 	# -----------------------------------------
-	# 	#     (rx*rx*y1d*y1d+ry*ry*x1d*x1d)
-	# 	#
-	# 	# that is equivalent to
-	# 	#
-	# 	#          rx*rx*ry*ry
-	# 	# = -----------------------------  -    1
-	# 	#   (rx*rx*y1d*y1d+ry*ry*x1d*x1d)
-	# 	#
-	# 	#              1
-	# 	# = -------------------------------- - 1
-	# 	#   x1d*x1d/(rx*rx) + y1d*y1d/(ry*ry)
-	# 	#
-	# 	# = 1/r - 1
-	# 	#
-	# 	# it turns out r is what they recommend checking
-	# 	# for the negative radicand case
-	# 	r = x1d * x1d / (rx * rx) + y1d * y1d / (ry * ry)
-	# 	if r > 1:
-	# 		#print('arc radius correction done')
-	# 		rr = math.sqrt(r)
-	# 		rx *= rr
-	# 		ry *= rr
-	# 		r = x1d * x1d / (rx * rx) + y1d * y1d / (ry * ry)
-	# 		r = 1 / r - 1
-	# 	elif r != 0:
-	# 		r = 1 / r - 1
-	# 	if -1e-10 < r < 0:
-	# 		r = 0
-	# 	r = math.sqrt(r)
-	# 	if fA == fS:
-	# 		r = -r
-	# 	cxd = (r * rx * y1d) / ry
-	# 	cyd = -(r * ry * x1d) / rx
-
-	# 	# step 3
-	# 	if phi:
-	# 		cx = cos_phi * cxd - sin_phi * cyd + 0.5 * (x1 + x2)
-	# 		cy = sin_phi * cxd + cos_phi * cyd + 0.5 * (y1 + y2)
-	# 	else:
-	# 		cx = cxd + 0.5 * (x1 + x2)
-	# 		cy = cyd + 0.5 * (y1 + y2)
-
-	# 	# step 4
-	# 	theta1 = cls.vector_angle2((1, 0), ((x1d - cxd) / rx, (y1d - cyd) / ry))
-	# 	dtheta = cls.vector_angle2(
-	# 		((x1d - cxd) / rx, (y1d - cyd) / ry),
-	# 		((-x1d - cxd) / rx, (-y1d - cyd) / ry)
-	# 	) % 360
-	# 	if fS == 0 and dtheta > 0:
-	# 		dtheta -= 360
-	# 	elif fS == 1 and dtheta < 0:
-	# 		dtheta += 360
-
-	# 	ellipse3 = Ellipse3(Point(cx, cy), diam1=Point(rx), diam2=Point(0, ry))
-	# 	return ellipse3
-
 
 
