@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 
 from zutils.ZGeom import Point, Polygon, Line, Circle2, Ellipse3, ZGeomItem, Plane
 from zutils.ZMatrix import Matrix, Affine
-#from zutils.ZGeomHelper import vectorAngle2, calculateArcEllipse
+#from zutils.ZGeomHelper import vectorAngle2		#, calculateArcEllipse
 #from zutils.shame import searchForEllipseCenter
 
 
@@ -1000,13 +1000,13 @@ class ZArcSegment(ZPathSegment):
 		rounded = 5
 		ret += str(round(self.m_rx, rounded)) + ' '
 		ret += str(round(self.m_ry, rounded)) + ' '
-		ret += str(round(self.m_xAngle, rounded)) + ' '
+		ret += str(round(self.getXAngle(), rounded)) + ' '
 		flag = '0'
 		if self.m_largeArc:
 			flag = '1'
 		ret += flag + ' '
 		flag = '0'
-		if self.m_deltaAngle < 0:
+		if self.isClockWise():
 			flag = '1'
 		ret += flag + ' '
 		ret += ZPathSegment.pointString(self.m_stop, rounded)
@@ -1022,7 +1022,7 @@ class ZArcSegment(ZPathSegment):
 		tabs = tabs + 1
 		ZGeomItem.printNumRounded('rx', self.m_rx, tabs, rounded)
 		ZGeomItem.printNumRounded('ry', self.m_ry, tabs, rounded)
-		#ZGeomItem.printNumRounded('x-angle', self.m_xAngle, tabs, rounded)
+		ZGeomItem.printNumRounded('x-angle', self.getXAngle(), tabs, rounded)
 		ZGeomItem.printStringTabbed('x-angle', '???', tabs)
 		ZGeomItem.printStringTabbed(f'large', str(self.m_largeArc), tabs)
 		ZGeomItem.printStringTabbed('clockwise', self.isClockWise(), tabs)
@@ -1040,6 +1040,7 @@ class ZArcSegment(ZPathSegment):
 
 	def reverse(self):
 		super().reverse()
+		self.m_ellipse.reverse()
 		self.adaptToEllipse(self.m_ellipse)
 
 
@@ -1148,7 +1149,9 @@ class ZArcSegment(ZPathSegment):
 		'''
 			return the angle (in degrees) between 2 2d vectors
 		'''
-		d = math.hypot(*u) * math.hypot(*v)
+		#d = math.hypot(*u) * math.hypot(*v)
+		#d = math.hypot(u) * math.hypot(v)
+		d = u.length() * v.length()
 		if d == 0:
 			return 0
 		c = (u[0] * v[0] + u[1] * v[1]) / d
@@ -1181,7 +1184,7 @@ class ZArcSegment(ZPathSegment):
 		ry = math.fabs(ry)
 
 		# step 1
-		if phi:
+		if abs(phi) > ZGeomItem.s_wantedAccuracy:
 			# this should be obsolete, as we have transformed the ellipse to be axis parallel
 			phi_rad = math.radians(phi)
 			sin_phi = math.sin(phi_rad)
@@ -1222,9 +1225,11 @@ class ZArcSegment(ZPathSegment):
 			ry *= rr
 			r = x1d * x1d / (rx * rx) + y1d * y1d / (ry * ry)
 			r = 1 / r - 1
-		elif r != 0:
+		#elif r != 0:
+		elif abs(r) > ZGeomItem.s_wantedAccuracy:
 			r = 1 / r - 1
-		if -1e-10 < r < 0:
+		#if -1e-10 < r < 0:
+		if -ZGeomItem.s_wantedAccuracy < r < 0:
 			r = 0
 		r = math.sqrt(r)
 		if fA == fS:
@@ -1233,26 +1238,34 @@ class ZArcSegment(ZPathSegment):
 		cyd = -(r * ry * x1d) / rx
 
 		# step 3
-		if phi:
+		##if phi:
+		if abs(phi) > ZGeomItem.s_wantedAccuracy:
 			cx = cos_phi * cxd - sin_phi * cyd + 0.5 * (x1 + x2)
 			cy = sin_phi * cxd + cos_phi * cyd + 0.5 * (y1 + y2)
 		else:
 			cx = cxd + 0.5 * (x1 + x2)
 			cy = cyd + 0.5 * (y1 + y2)
 
-		# step 4
-		theta1 = cls.vectorAngle2((1, 0), ((x1d - cxd) / rx, (y1d - cyd) / ry))
-		dtheta = cls.vectorAngle2(
-			((x1d - cxd) / rx, (y1d - cyd) / ry),
-			((-x1d - cxd) / rx, (-y1d - cyd) / ry)
-		) % 360
-		if fS == 0 and dtheta > 0:
-			dtheta -= 360
-		elif fS == 1 and dtheta < 0:
-			dtheta += 360
+		# step 4 - seems obsolete, as phi is always 0
+		#theta1 = cls.vectorAngle2((1, 0), ((x1d - cxd) / rx, (y1d - cyd) / ry))
+		#dtheta = cls.vectorAngle2(
+		#	((x1d - cxd) / rx, (y1d - cyd) / ry),
+		#	((-x1d - cxd) / rx, (-y1d - cyd) / ry)
+		#) % 360
+		#if fS == 0 and dtheta > 0:
+		#	dtheta -= 360
+		#elif fS == 1 and dtheta < 0:
+		#	dtheta += 360
 
 		ellipse3 = Ellipse3(Point(cx, cy), diam1=Point(rx), diam2=Point(0, ry))
 		return ellipse3
+	
+
+	def getXAngle(self):
+		'''
+			Return the svg angle between the x axis and my main axis (hopefully correct !!)
+		'''
+		return self.vectorAngle2(Point(1), self.m_ellipse.m_diam1)
 
 
 
@@ -1304,7 +1317,7 @@ class ZPath:
 		if len(self.m_segments) == 0:
 			return ret
 		rounded = 5
-		currPos = Point(0, 0)
+		currPos = Point(math.nan, math.nan)
 		for seg in self.m_segments:
 			if not seg.m_start.isSameAs(currPos):
 				ret += 'M ' +  ZPathSegment.pointString(seg.m_start, rounded)
@@ -1546,7 +1559,7 @@ class ZPath:
 							if ZGeomItem.almostEqual(seg.m_rx, seg.m_ry):
 								ellipse = Circle2(seg.m_center, seg.m_rx)
 							else:
-								ellipse = Ellipse2(seg.m_center, seg.m_rx, seg.m_ry, seg.m_xAngle)
+								ellipse = Ellipse2(seg.m_center, seg.m_rx, seg.m_ry, seg.getXAngle())
 							ellipses.append(ellipse)
 							candidate = []
 					else:

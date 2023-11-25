@@ -940,7 +940,7 @@ class Ellipse3(ZGeomItem):
 		if not diam1.isPerpendicular(diam2):
 			raise Exception('Ellipse3: diameters must be perpendicular')
 
-		if diam2.length() > diam1.length():
+		if (diam2.length() - diam1.length()) > ZGeomItem.s_wantedAccuracy:
 			# sort according length
 			diam1, diam2 = diam2, diam1
 			vert1, vert2 = vert2, vert1
@@ -952,8 +952,9 @@ class Ellipse3(ZGeomItem):
 		self.m_vert2 = vert2
 
 		self.m_a = self.m_diam1.length()
-		self.m_b = self.m_diam2.length()		
-		self.m_exc = math.sqrt(self.m_a*self.m_a - self.m_b*self.m_b)
+		self.m_b = self.m_diam2.length()
+		radicant = max(0, self.m_a*self.m_a - self.m_b*self.m_b)
+		self.m_exc = math.sqrt(radicant)
 		focusOffset = self.m_diam1.scaledTo(self.m_exc)
 		self.m_focus1 = self.m_center + focusOffset
 		self.m_focus2 = self.m_center - focusOffset
@@ -965,6 +966,12 @@ class Ellipse3(ZGeomItem):
 			self.m_vert2 = self.m_center + self.m_diam2
 
 		self.m_cachedPoints = None
+
+
+	def reverse(self):
+		self.m_diam1, self.m_diam2 = self.m_diam2, self.m_diam1
+		self.m_vert1, self.m_vert2 = self.m_vert2, self.m_vert1
+		self.m_focus1, self.m_focus2 = self.m_focus2, self.m_focus1
 
 
 	def copy(self):

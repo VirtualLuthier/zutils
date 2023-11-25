@@ -9,66 +9,38 @@ from xml.dom import minidom
 import re
 
 
-class SvgPatcher:
-	"""
-		Allows to open and change an existing svg file
-	"""
-	def __init__(self, templateFileName, mmOrIn, targetFileName):
-		"""
-		
-		"""
-		self.m_templateName = self.getFullTemplateFilePath(templateFileName)
-		self.m_targetFile = targetFileName
+class SvgWriter:
+	def __init__(self, mmOrIn, createRoot=True, useNamespaces=True):
+		'''
+				Create a node with the needed svg namespace settings and the viewport
+		'''
 		self.m_unit = mmOrIn
+		self.m_useNamespaces = useNamespaces
+
 		self.m_namespaces = {}
-		#self.m_namespaces = {'svg': 'http://www.w3.org/2000/svg'}
-		self.registerNamespace('', 'http://www.w3.org/2000/svg')
-		self.registerNamespace('svg', 'http://www.w3.org/2000/svg')
+		if self.m_useNamespaces:
+			#self.m_namespaces = {'svg': 'http://www.w3.org/2000/svg'}
+			self.registerNamespace('', 'http://www.w3.org/2000/svg')
+			self.registerNamespace('svg', 'http://www.w3.org/2000/svg')
+			self.m_namespacePrefix = 'svg:'
+		else:
+			self.m_namespacePrefix = ''
+
 		self.m_tree = None
 		self.m_root = None
 		self.m_width = math.nan
 		self.m_height = math.nan
 
+		self.m_targetFile = None
 
-	@classmethod
-	def getFullTemplateFilePath(cls, templateRelativeName):
-		if templateRelativeName.find('/') >= 0 or templateRelativeName.find('\\') >= 0:
-			# if name is absolute, return name
-			return templateRelativeName
-		ownFolder = os.path.dirname(os.path.abspath(__file__))
-		return ownFolder + '/templateFiles/' + templateRelativeName
-
-
-	@classmethod
-	def makeIdFromString(cls, theString):
-		ret = ''
-		start = theString[0]
-		if not start.isalpha():
-			ret = 'ID'
-		for theChr in theString:
-			if not theChr.isalpha and not theChr.isdigit():
-				ret += '_'
-			else:
-				ret += theChr
-		return ret
-
-
-	def readTemplateFile(self):
-		tree = ET.parse(self.m_templateName)
-		self.m_tree = tree
-		self.m_root = tree.getroot()
-		self.m_width = self.getSizeFrom(self.m_root, 'width')
-		self.m_height = self.getSizeFrom(self.m_root, 'height')
-
-
-	def getSizeFrom(self, node, attName):
-		val = node.get(attName)
-		if val is None:
-			return math.nan
-		numberPart = re.findall(r'[\d\.]+', val)
-		if len(numberPart) == 0:
-			return math.nan
-		return float(numberPart[0])
+		if createRoot:
+			root = ET.Element('svg')
+			root.set('version', '1.1')
+	#		ret.set('id', 'Layer_1')
+			root.set('xmlns', 'http://www.w3.org/2000/svg')
+			root.set('xmlns:svg', 'http://www.w3.org/2000/svg')
+			root.set('xmlns:xlink', 'http://www.w3.org/1999/xlink')
+			self.m_root = root
 
 
 	def registerNamespace(self, name, url):
@@ -99,15 +71,19 @@ class SvgPatcher:
 		node.set(name, value)
 
 
-	def setSize(self, width, height):
-		w = width		# perhaps should be rounded?
-		h = height		# perhaps should be rounded?
-		self.m_width = w
-		self.m_height = h
+	def setSize(self, width, height, left=0, top=0):
+		self.m_width = width
+		self.m_height = height
+		self.m_left = left
+		self.m_top = top
 		root = self.m_root
-		root.set('width', str(w) + self.m_unit)
-		root.set('height', str(h) + self.m_unit)
-		root.set('viewBox', '0 0 ' + str(width) + ' ' + str(height))
+		root.set('width', f'{width}{self.m_unit}')
+		root.set('height', f'{height}{self.m_unit}')
+		root.set('viewBox', f'{left} {top} {width} {height}')
+		self.m_left = left
+		self.m_top = top
+		self.m_width = width
+		self.m_height = height
 
 
 	def write(self):
@@ -117,13 +93,18 @@ class SvgPatcher:
 			f.write(pretty)
 
 
-	def prettify(self, elem):
-    	#	Return a pretty-printed XML string for the Element.
-		rough_string = ET.tostring(elem, 'utf-8')
-		#print(rough_string)
-		reparsed = minidom.parseString(rough_string)
-		return reparsed.toprettyxml(indent="	", newl='\n', encoding='utf-8')
-		#return reparsed.toprettyxml(indent="  ")
+	def svgString(self, prettify=False):
+		theString = '<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(self.m_root, 'unicode')
+		if not prettify:
+			return theString
+		return self.prettifiedSvgString(theString)
+
+
+	def prettifiedSvgString(self, roughString):
+		reparsed = minidom.parseString(roughString)
+		bString = reparsed.toprettyxml(indent="	", newl='\n', encoding='utf-8')
+		return str(bString, 'utf-8')
+
 
 
 	def startGroup(self, parent=None, name=None):
@@ -135,21 +116,109 @@ class SvgPatcher:
 		return group
 
 
-	def startPath(self, parent):
-		path = ET.SubElement(parent, 'svg:path')
+	@classmethod
+	def makeIdFromString(cls, theString):
+		ret = ''
+		start = theString[0]
+		if not start.isalpha():
+			ret = 'ID'
+		for theChr in theString:
+			if not theChr.isalpha and not theChr.isdigit():
+				ret += '_'
+			else:
+				ret += theChr
+		return ret
+	
+
+	def getSizeFrom(self, node, attName):
+		val = node.get(attName)
+		if val is None:
+			return math.nan
+		numberPart = re.findall(r'[\d\.]+', val)
+		if len(numberPart) == 0:
+			return math.nan
+		return float(numberPart[0])
+	
+
+	def getNiceParent(self, parent):
+		if parent is not None:
+			return parent
+		return self.m_root
+	
+
+	def addPath(self, parent, dAttribute, strokeWidth=1, stroke='black', fill='none'):
+		path = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'path')
+		path.set('stroke', stroke)
+		path.set('stroke-width', str(strokeWidth))
+		path.set('fill', fill)
+		path.set('d', dAttribute)
 		return path
 
 
-	def addCircle(self, parent, circle, strokeWidth=1):
-		c = ET.SubElement(parent, 'svg:circle')
-		c.set('cx', str(circle.m_center.m_x))
-		c.set('cy', str(circle.m_center.m_y))
-		c.set('r', str(circle.m_radius))
-		c.set('stroke', 'black')
-		c.set('stroke-width', str(strokeWidth))
-		c.set('fill', 'none')
+	def addCircle(self, parent, circleObject, strokeWidth=1, stroke='black', fill='none'):
+		circle = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'circle')
+		circle.set('cx', str(circleObject.m_center.m_x))
+		circle.set('cy', str(circleObject.m_center.m_y))
+		circle.set('r', str(circleObject.m_radius))
+		circle.set('stroke', stroke)
+		circle.set('stroke-width', str(strokeWidth))
+		circle.set('fill', fill)
+		return circle
 
 
+	def addLine(self, parent, x1, y1, x2, y2, strokeWidth=1, strokeColor='black'):
+		line = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'line')
+		line.set('x1', str(x1))
+		line.set('x2', str(x2))
+		line.set('y1', str(y1))
+		line.set('y2', str(y2))
+		line.set('stroke', strokeColor)
+		line.set('stroke-width', str(strokeWidth))
+		return line
 
 
-	
+	def addRect(self, parent, left, top, width, height, strokeWidth=1, stroke='black', fill='none'):
+		rect = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'rect')
+		rect.set('x', str(left))
+		rect.set('y', str(top))
+		rect.set('width', str(width))
+		rect.set('height', str(height))
+		rect.set('stroke', stroke)
+		rect.set('stroke-width', str(strokeWidth))
+		rect.set('fill', fill)
+		return rect
+
+
+##########################################################
+##########################################################
+
+
+class SvgPatcher(SvgWriter):
+	"""
+		Allows to open and change an existing svg file
+	"""
+	def __init__(self, templateFileName, mmOrIn, targetFileName):
+		"""
+		
+		"""
+		super().__init__(mmOrIn, False)
+		self.m_templateName = self.getFullTemplateFilePath(templateFileName)
+		self.m_targetFile = targetFileName
+		
+
+	@classmethod
+	def getFullTemplateFilePath(cls, templateRelativeName):
+		if templateRelativeName.find('/') >= 0 or templateRelativeName.find('\\') >= 0:
+			# if name is absolute, return name
+			return templateRelativeName
+		ownFolder = os.path.dirname(os.path.abspath(__file__))
+		return ownFolder + '/templateFiles/' + templateRelativeName
+
+
+	def readTemplateFile(self):
+		tree = ET.parse(self.m_templateName)
+		self.m_tree = tree
+		self.m_root = tree.getroot()
+		self.m_width = self.getSizeFrom(self.m_root, 'width')
+		self.m_height = self.getSizeFrom(self.m_root, 'height')
+
