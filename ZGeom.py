@@ -940,10 +940,10 @@ class Ellipse3(ZGeomItem):
 		if not diam1.isPerpendicular(diam2):
 			raise Exception('Ellipse3: diameters must be perpendicular')
 
-		if (diam2.length() - diam1.length()) > ZGeomItem.s_wantedAccuracy:
-			# sort according length
-			diam1, diam2 = diam2, diam1
-			vert1, vert2 = vert2, vert1
+		#if (diam2.length() - diam1.length()) > ZGeomItem.s_wantedAccuracy:
+		#	# sort according length
+		#	diam1, diam2 = diam2, diam1
+		#	vert1, vert2 = vert2, vert1
 
 		self.m_center = center
 		self.m_diam1 = diam1
@@ -951,11 +951,14 @@ class Ellipse3(ZGeomItem):
 		self.m_vert1 = vert1
 		self.m_vert2 = vert2
 
-		self.m_a = self.m_diam1.length()
-		self.m_b = self.m_diam2.length()
+		l1 = self.m_diam1.length()
+		l2 = self.m_diam2.length()
+		self.m_a = max(l1, l2)
+		self.m_b = min(l1, l2)
 		radicant = max(0, self.m_a*self.m_a - self.m_b*self.m_b)
 		self.m_exc = math.sqrt(radicant)
-		focusOffset = self.m_diam1.scaledTo(self.m_exc)
+		mainAxis = self.m_diam1 if l1 > l2 else self.m_diam2
+		focusOffset = mainAxis.scaledTo(self.m_exc)
 		self.m_focus1 = self.m_center + focusOffset
 		self.m_focus2 = self.m_center - focusOffset
 
@@ -1007,11 +1010,17 @@ class Ellipse3(ZGeomItem):
 
 	def tangentForAngle(self, degrees):
 		"""
-			Return the tangent (not normalized) at a agiven angle
+			Return the tangent (not normalized) at a given angle
 		"""
 		angle = math.radians(degrees)
 		# this is simply the derivative of the point formula with respect to angle
 		return -self.m_diam1.scaledBy(math.sin(angle)) + self.m_diam2.scaledBy(math.cos(angle))
+	
+
+	def secondDerivativeForAngle(self, degrees):
+		# this is simply the derivative of the tangent formula with respect to angle
+		angle = math.radians(degrees)
+		return -self.m_diam1.scaledBy(math.cos(angle)) - self.m_diam2.scaledBy(math.sin(angle))
 
 
 	#def provideCachedPoints(self):
@@ -1031,6 +1040,8 @@ class Ellipse3(ZGeomItem):
 		'''
 		if not self.containsPoint(point):
 			print(f'Ellipse3::angleForPoint cannot find angle for wrong point {point}')
+			self.printComment('my own ellipse description')
+			self.containsPoint(point)		# for debugging
 			return None
 		offset = point - self.m_center
 		angle = self.m_diam1.angleTo(offset)

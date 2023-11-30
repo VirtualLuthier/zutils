@@ -36,6 +36,8 @@ class ZPathSegment:
 		self.m_start = start
 		self.m_stop = stop
 
+		self.m_normal = None
+
 
 	def reverse(self):
 		"""
@@ -49,7 +51,7 @@ class ZPathSegment:
 
 	def reversed(self):
 		"""
-			Return a yopy of me that is reversed
+			Return a copy of me that is reversed
 		"""
 		ret = self.copy()
 		ret.reverse()
@@ -57,6 +59,9 @@ class ZPathSegment:
 
 
 	def makeFlat(self):
+		'''
+			will be overridden by some subclasses
+		'''
 		self.m_start.m_z = 0
 		self.m_stop.m_z = 0
 
@@ -89,14 +94,77 @@ class ZPathSegment:
 		return val
 
 
-	#@classmethod
-	def getInterPoints(self, _) -> list:
-		raise Exception('not implemented getInterPoints() in class: ' + self.__class__.__name__)
+	def getAllInterPoints(self, paramStep, addLast=True):
+		"""
+			return list of all points with this parameter step
+		"""
+		#print('--------------------------------------------------------------')
+		points = []
+		#print('in getAllInterPoints')
+		param = 0
+		while param <= 1:
+			points.append(self.pointAtParam(param))
+			param += paramStep
+		if addLast and (param < 1 - ZGeomItem.s_wantedAccuracy):
+			points.append(self.pointAtParam(1))
+		return points
 
 
-	#@classmethod
-	def getInterPointsWithTangent(self, _) -> list:
-		raise Exception('not implemented getInterPointsWithTangent() in class: ' + self.__class__.__name__)
+
+	def getAllInterPointsWithTangent(self, paramStep, addLast=True):
+		"""
+			get interpoints and tangents
+			Return array of tuples (each one contains point and derivative)
+		"""
+		#print('--------------------------------------------------------------')
+		ret = []
+		param = 0
+		#print('in getAllInterPointsWithTangent')
+		while param <= 1:
+			point = self.pointAtParam(param)
+			tangent = self.tangentAtParam(param)
+			ret.append((point, tangent))
+			param += paramStep
+		if addLast and (param < 1 - ZGeomItem.s_wantedAccuracy):
+			ret.append((self.pointAtParam(1), self.tangentAtParam(1)))
+
+		return ret
+	
+
+	def getAllInterPointsAndDerivs(self, paramStep, addLast=True) -> list:
+		'''
+			get a tuple with (point, tangent, osculatingCircles) at all parameters with step _offset
+		'''
+		ret = []
+		param = 0
+		while param <= 1:
+			point = self.pointAtParam(param)
+			tangent = self.tangentAtParam(param)
+			second = self.secondDerivativeAtParam(param)
+			oscul = self.osculatingCircle(point, tangent, second)
+			ret.append((point, tangent, oscul))
+			param += paramStep
+		if addLast and (param < 1 - ZGeomItem.s_wantedAccuracy):
+			ret.append((self.pointAtParam(1), self.tangentAtParam(1), self.secondDerivativeAtParam(1)))
+		return ret
+	
+
+	def osculatingCircle(self, point, tangent, second):
+		leng = tangent.length()
+		k = tangent.crossProduct(second).length() / (leng * leng * leng)
+		if ZGeomItem.almostZero(k):
+			return None
+		if self.m_normal is None:
+			normal = self.getOsculatingNormal(tangent, second)
+		else:
+			normal = self.m_normal
+		rad = 1.0 / k
+		#print(f'rad: {rad}, must guess the plane, currently works only for flat segments')
+		#normal = Point(0, 0, -1)
+		toCenter = normal.crossProduct(tangent)
+		toCenter = toCenter.scaledTo(rad)
+		center = point + toCenter
+		return Circle2(center, rad)
 
 
 	def pointsAreNear(self, p1, p2):
@@ -135,7 +203,6 @@ class ZPathSegment:
 			func must return a number.
 			Returns a list: [segment, point, segParameter, value]
 		"""
-		#raise Exception('not implemented getInterPointsWithTangent() in class: ' + self.__class__.__name__)
 		(tStart, tStop, tDelta) = self.getParameterRange()
 		numSteps = 200
 		diff = tDelta / float(numSteps)
@@ -144,14 +211,14 @@ class ZPathSegment:
 
 		for step in range(numSteps):
 			t = tStart + step * diff
-			test = self.getInterPointAtParameter(t)
+			test = self.pointAtParam(t)
 			fTest = func(test)
 			if fTest < fMin:
 				fMin = fTest
 				tMin = t
 
 		# also test my "stop" point:
-		fTest = func(self.getInterPointAtParameter(tStop))
+		fTest = func(self.pointAtParam(tStop))
 		if fTest < fMin:
 			fMin = fTest
 			tMin = tStop
@@ -160,11 +227,11 @@ class ZPathSegment:
 		low = max(tStart, tMin - diff)
 		upp = min(tMin + diff, tStop)
 		diff = upp - low
-		pLow = self.getInterPointAtParameter(low)
+		pLow = self.pointAtParam(low)
 		fLow = func(pLow)
 		while abs(diff) > 1e-10:			#	0.0000000001:
-			pLow = self.getInterPointAtParameter(low)
-			pUpp = self.getInterPointAtParameter(upp)
+			pLow = self.pointAtParam(low)
+			pUpp = self.pointAtParam(upp)
 			fLow = func(pLow)
 			fUpp = func(pUpp)
 			diff /= 2.0
@@ -236,17 +303,15 @@ class ZPathSegment:
 		self.xmlAddDetailsTo(node)
 
 
-	def cncFriendlySimple(self):
+	def cncFriendlySimple(self, numPoints):
 		"""
-			Return an array of Line segments that approximate myself
+			Return an array of Line segments that approximate myself. No precision given
 		"""
-		numPoints = 100
-		ps = self.getInterPointsWithTangent(1 / numPoints)
+		ps = self.getAllInterPoints(1 / numPoints)
 		ret = []
 		lastPoint = None
 
-		for arr in ps:			#numPoints-1):
-			p1 = arr[0]
+		for p1 in ps:
 			if lastPoint is not None:
 				line = ZLineSegment(lastPoint, p1)
 				ret.append(line)
@@ -262,12 +327,12 @@ class ZPathSegment:
 		if tolerance == 0:
 			raise Exception('cncFriendly(): tolerance 0 is not possible')
 		numPoints = 1000
-		ps = self.getInterPointsAndStop(1 / numPoints)
+		ps = self.getAllInterPointsAndDerivs(1 / numPoints)
 		ret = []
 		segPoints = []
 		isInLine = False
 
-		for p1 in ps:
+		for (p1, tangent, circle) in ps:
 			segPoints.append(p1)
 			segLen = len(segPoints)
 			if segLen < 3:
@@ -309,12 +374,68 @@ class ZPathSegment:
 			else:
 				self.addOneCncSegment(ret, segPoints, currentCircle)
 		return ret
+	
+
+	# def cncFriendlyObsolete(self, tolerance):
+	# 	"""
+	# 		Return an array of Line-or-Arc segments that approximate myself
+	# 	"""
+	# 	if tolerance == 0:
+	# 		raise Exception('cncFriendly(): tolerance 0 is not possible')
+	# 	numPoints = 1000
+	# 	ps = self.getAllInterPoints(1 / numPoints)
+	# 	ret = []
+	# 	segPoints = []
+	# 	isInLine = False
+
+	# 	for p1 in ps:
+	# 		segPoints.append(p1)
+	# 		segLen = len(segPoints)
+	# 		if segLen < 3:
+	# 			continue
+	# 		if segLen == 3:
+	# 			currentCircle = Circle2.circleFromThreePoints(segPoints[0], segPoints[1], segPoints[2])
+	# 			if currentCircle is None:
+	# 				isInLine = True
+	# 			continue
+
+	# 		# ok, we have more than 3 points
+	# 		if isInLine:
+	# 			if ZPathSegment.isStillInLine(segPoints, tolerance):
+	# 				continue
+	# 			segPoints.pop()
+	# 			ZPathSegment.addOneLine(ret, segPoints)
+	# 			last = segPoints.pop()
+	# 			segPoints = []
+	# 			segPoints.append(last)
+	# 			segPoints.append(p1)
+	# 			isInLine = False
+	# 		else:
+	# 			newCircle = ZPathSegment.isAcceptableCncTolerance(segPoints, currentCircle, tolerance)
+	# 			if newCircle is not None:
+	# 				currentCircle = newCircle
+	# 			else:
+	# 				# we need a new segment, first finish the current
+	# 				segPoints.pop()
+	# 				ZPathSegment.addOneCncSegment(ret, segPoints, currentCircle)
+	# 				last = segPoints.pop()			
+	# 				segPoints = []
+	# 				segPoints.append(last)
+	# 				segPoints.append(p1)
+
+	# 	#print('one segment done')
+	# 	if len(segPoints) > 1:
+	# 		if isInLine:
+	# 			ZPathSegment.addOneLine(ret, segPoints)
+	# 		else:
+	# 			self.addOneCncSegment(ret, segPoints, currentCircle)
+	# 	return ret	
 
 
 	@classmethod
 	def addOneCncSegment(cls, segList, segPoints, currentCircle):
 		"""
-			Adds a line or arc segment, that fits throuh the segPoints list to teh given segList
+			Adds a line or arc segment, that fits throuh the segPoints list to the given segList
 		"""
 		if len(segPoints) < 2:
 			raise Exception('this should never happen: segPoints less than 2')
@@ -328,7 +449,13 @@ class ZPathSegment:
 				newSeg = ZLineSegment(segPoints[0], segPoints[-1])
 			else:
 				rad = currentCircle.m_radius
-				newSeg = ZArcSegment(rad, rad, 0, segPoints[0], segPoints[-1], False, poly.isClockWise(Point(0, 0, 1)))
+				# only for debugging:
+				stPoint = segPoints[0]
+				if ZGeomItem.almostZero(stPoint.m_x - 98.86255480000004):
+					print ('debug me')
+				# end debug statements
+				newSeg = ZArcSegment.createZArcFromSvg(rad, rad, 0, segPoints[0], segPoints[-1], False, poly.isClockWise(Point(0, 0, 1)))
+		#newSeg.printComment('newly added to cncfriendly')
 		segList.append(newSeg)
 
 
@@ -372,21 +499,16 @@ class ZPathSegment:
 		ret = str(round(point.m_x, rounded)) + ',' + str(round(point.m_y, rounded)) + ' '
 		return ret
 
-	def getInterPointsWithTangentAndStop(self, offset):
-		ret = self.getInterPointsWithTangent(offset)
-		last = ret[-1][0]
-		if not last.isSameAs(self.m_stop):
-			ret.append(self.getInterPointWithTangent(1.0))
-		return ret
 
-
-	def getInterPointsAndStop(self, offset):
-		ret = self.getInterPoints(offset)
-		last = ret[-1]
-		if not last.isSameAs(self.m_stop):
-			ret.append(self.m_stop)
-		return ret
-
+	# def getAllInterPointsAndStop(self, paramStep):
+	# 	'''
+	# 		return according list and add self.m_stop, if needed
+	# 	'''
+	# 	ret = self.getAllInterPoints(paramStep)
+	# 	last = ret[-1]
+	# 	if not last.isSameAs(self.m_stop):
+	# 		ret.append(self.m_stop)
+	# 	return ret
 
 
 ###########################################################
@@ -408,20 +530,30 @@ class ZLineSegment(ZPathSegment):
 		self.m_stop = affine * self.m_stop
 
 
-	def getInterPoints(self, _):
+	def getAllInterPoints(self, _):
 		return [self.m_start, self.m_stop]
 
 
-	def getInterPointsWithTangent(self, _):
+	def getAllInterPointsWithTangent(self, _):
 		tang = self.m_stop - self.m_start
-		m1 = [self.m_start, -tang]
-		m2 = [self.m_stop, -tang]
+		m1 = (self.m_start, -tang)
+		m2 = (self.m_stop, -tang)
 		return [m1, m2]
 
 
 	def getInterPointWithTangent(self, _):
 		tang = self.m_stop - self.m_start
-		return [self.m_start, -tang]
+		return (self.m_start, -tang)
+	
+
+	def getAllInterPointsAndDerivs(self, _offset) -> list:
+		'''
+			get a tuple with (point, tangent, osculatingCircles) at all parameters with step _offset
+		'''
+		tang = self.m_stop - self.m_start
+		m1 = (self.m_start, -tang, None)
+		m2 = (self.m_stop, -tang, None)
+		return [m1, m2]
 
 
 	def printComment(self, comment, tabs=1, rounded=2):
@@ -436,8 +568,25 @@ class ZLineSegment(ZPathSegment):
 		return ret
 
 
-	def getInterPointAtParameter(self, t):
+	def pointAtParam(self, t):
+		'''
+			return the point that is given by the param
+		'''
 		return self.m_start + (self.m_stop - self.m_start).scaledBy(t)
+	
+
+	def tangentAtParam(self, t):
+		'''
+			return the tangent direction through the point that is given by the param
+		'''
+		return self.m_stop - self.m_start
+
+
+	def secondDerivativeAtParam(self, _):
+		'''
+			return the second derivation direction through the point that is given by the param
+		'''
+		return Point()
 
 
 	def xmlAddDetailsTo(self, node):
@@ -473,13 +622,47 @@ class ZBezier3Segment(ZPathSegment):
 	"""
 		a cubic bezier segment
 	"""
-	s_bernsteinFunctions = {}
-	s_bernsteinDerivationsOne = {}
+	#s_bernsteinFunctions = {}
+	#s_bernsteinDerivationsOne = {}
 
 	def __init__(self, p1, p2, h1, h2):
 		super().__init__(p1, p2)
 		self.m_handleStart = h1
 		self.m_handleStop = h2
+		self.m_bernsteinPoints = []
+		self.recalculateGeometry()
+
+
+
+
+	def recalculateGeometry(self):
+		'''
+			cacluate the bernstein points for calculation of points and derivatives
+			also recalculate my normal
+		'''
+		self.m_bernsteinPoints = []
+		p1 = self.m_start
+		p2 = self.m_stop
+		h1 = self.m_handleStart
+		h2 = self.m_handleStop
+		# quadratic curve between p1, h1, h2:
+		x1 = p1 - h1.scaledBy(2) + h2
+		x2 = (h1 - p1).scaledBy(2)
+		# quadratic curve between h1, h2, p2
+		y1 = h1 - h2.scaledBy(2) + p2
+		y2 = (h2 - h1).scaledBy(2)
+		# now combine x1, x2, y1, y2 for the cubic bezier
+		self.m_bernsteinPoints.append(y1 - x1)				# for t**3
+		self.m_bernsteinPoints.append(x1 - x2 + y2)			# for t**2
+		self.m_bernsteinPoints.append(x2 - p1 + h1)			# for t
+		self.m_bernsteinPoints.append(p1)					# constant
+
+		# now calculate the normal for the osculating circles (makes only sense, if I am lying in a plane)
+		plane = Plane(p1, h1, p2)
+		if plane.containsPoint(h2):
+			self.m_normal = plane.m_normal
+
+
 
 
 
@@ -491,39 +674,6 @@ class ZBezier3Segment(ZPathSegment):
 		handle1 = start + tangentStart.scaledTo(dist * stiffnessStart)
 		handle2 = stop + tangentStop.scaledTo(dist * stiffnessStop)
 		return ZBezier3Segment(start, stop, handle1, handle2)
-
-
-	@classmethod
-	def getBernsteinCoefficients(cls, numberOfSteps):
-
-		if numberOfSteps in cls.s_bernsteinFunctions:
-			return [cls.s_bernsteinFunctions[numberOfSteps], cls.s_bernsteinDerivationsOne[numberOfSteps]]
-
-		diff = 1.0 / numberOfSteps
-		coeffsFunction = []
-		coeffsDerivative = []
-		for ii in range(numberOfSteps):
-			t1 = ii * diff
-			t2 = 1.0 - t1
-
-			# first: the function
-			coeffs = []
-			coeffs.append(t2 * t2 * t2)
-			coeffs.append(3 * t1 * t2 * t2)
-			coeffs.append(3 * t1 * t1 * t2)
-			coeffs.append(t1 * t1 * t1)
-			coeffsFunction.append(coeffs)
-
-			# second: the first derivative:
-			coeffs = []
-			coeffs.append(3 * t2 * t2)
-			coeffs.append(6 * t1 * t2)
-			coeffs.append(3 * t1 * t1)
-			coeffsDerivative.append(coeffs)
-
-		cls.s_bernsteinFunctions[numberOfSteps] = coeffsFunction
-		cls.s_bernsteinDerivationsOne[numberOfSteps] = coeffsDerivative
-		return [coeffsFunction, coeffsDerivative]
 
 
 	def makeFlat(self):
@@ -540,79 +690,37 @@ class ZBezier3Segment(ZPathSegment):
 		return ret
 
 
-	def deCasteljau3(self, t):
-		# return the cubic bezierpoint for a given t (between 0 and 1)
-		pass1Points = self.deCasteljauPass1(t)
-		(startToHandle, handleToHandle, handleToStop) = pass1Points
-		pass2Handle1 = self.interpolate(startToHandle, handleToHandle, t)
-		pass2Handle2 = self.interpolate(handleToHandle, handleToStop, t)
-		ret = self.interpolate(pass2Handle1, pass2Handle2, t)
-		return ret
+	def pointAtParam(self, t):
+		'''
+			return the point that is given by the param
+		'''
+		a = self.m_bernsteinPoints
+		return a[0].scaledBy(t*t*t) + a[1].scaledBy(t*t) + a[2].scaledBy(t) + a[3]
+	
 
+	def tangentAtParam(self, t):
+		'''
+			return the tangent direction through the point that is given by the param
+		'''
+		a = self.m_bernsteinPoints
+		return a[0].scaledBy(3*t*t) + a[1].scaledBy(2*t) + a[2]
+	
 
-	def getInterPointAtParameter(self, t):
-		return self.deCasteljau3(t)
+	def secondDerivativeAtParam(self, t):
+		'''
+			return the second derivation direction through the point that is given by the param
+		'''
+		a = self.m_bernsteinPoints
+		return a[0].scaledBy(6*t) + a[1].scaledBy(2)
+	
 
-
-	def deCasteljau3WithTangent(self, t):
-		# return the cubic bezierpoint for a given t (between 0 and 1)
-		# additional return the tangent direction in this point (pointing to greater t)
-		pass1Points = self.deCasteljauPass1(t)
-		(startToHandle, handleToHandle, handleToStop) = pass1Points
-		pass2Handle1 = self.interpolate(startToHandle, handleToHandle, t)
-		pass2Handle2 = self.interpolate(handleToHandle, handleToStop, t)
-		ret = self.interpolate(pass2Handle1, pass2Handle2, t)
-		if pass2Handle1.isSameAs(pass2Handle2):
-			# this seems to happen, when the handle and point is identical
-			# just take the other handle
-			if t <= 0.1:
-				return [ret, self.getTangentAtStart()]
-				#if self.m_start.isSameAs(self.m_handleStart):
-				#	return [ret, self.m_handleStop - self.m_start]
-				
-			if t > 0.9:
-				return [ret, self.getTangentAtStop()]
-				#print('return default value in deCasteljau3WithTangent')
-				#if self.m_stop.isSameAs(self.m_handleStop):
-				#	return [ret, self.m_handleStart - self.m_stop]
-			#return [ret, Point(-1, 0, 0)]
-			raise Exception('unhandled unknown tangent in deCasteljau3WithTangent')
-		return [ret, pass2Handle2 - pass2Handle1]
-
-
-	def getTangentAtStart(self):
-		"""
-			handle the degenerated cases
-		"""
-		if self.m_start.isSameAs(self.m_handleStart):
-			if self.m_start.isSameAs(self.m_handleStop):
-				return self.m_stop - self.m_start
-			return self.m_handleStop - self.m_start
-		elif not self.m_start.isSameAs(self.m_stop):
-			# this should be the normal case
-			return self.m_handleStart - self.m_start
-		raise Exception('ZBezier3Segment completely degenerated')
-
-
-	def getTangentAtStop(self):
-		"""
-			handle the degenerated case
-		"""
-		if self.m_stop.isSameAs(self.m_handleStop):
-			if self.m_stop.isSameAs(self.m_handleStart):
-				return self.m_start - self.m_stop
-			return self.m_handleStart - self.m_stop
-		elif not self.m_start.isSameAs(self.m_stop):
-			# this should be the normal case
-			return self.m_handleStop - self.m_stop
-		raise Exception('ZBezier3Segment completely degenerated')
-
-
-	def deCasteljauPass1(self, t):
-		startToHandle = self.interpolate(self.m_start, self.m_handleStart, t)
-		handleToHandle = self.interpolate(self.m_handleStart, self.m_handleStop, t)
-		handleToStop = self.interpolate(self.m_handleStop, self.m_stop, t)
-		return [startToHandle, handleToHandle, handleToStop]
+	def getOsculatingNormal(self, tangent, second):
+		'''
+			I must return the normal of the osculation point. Is only called for segments that use several planes
+		'''
+		#raise Exception('ZBezier3Segment::getOsculatingNormal() not yet implemented')
+		print('ZArcSegment::getOsculatingNormal: please test for correctness!')
+		return tangent.crossProduct(second)
 
 
 	def interpolate(self, p1, p2, t):
@@ -626,86 +734,7 @@ class ZBezier3Segment(ZPathSegment):
 		h2 = self.m_handleStop
 		self.m_handleStart = h2
 		self.m_handleStop = h1
-
-
-	def getInterPointsDeCasteljau(self, offset):
-		points = []
-		fact = 0.0
-		while fact < 1:
-			points.append(self.deCasteljau3(fact))
-			fact = fact + offset
-		return points
-
-
-	def getInterPoints(self, offset):
-		"""
-			get interpoints with Bernstein coefficients
-		"""
-		#print('--------------------------------------------------------------')
-		points = []
-		numPoints = int(1.0 / offset)
-		coeffs = ZBezier3Segment.getBernsteinCoefficients(numPoints)[0]
-		p0 = self.m_start
-		p1 = self.m_handleStart
-		p2 = self.m_handleStop
-		p3 = self.m_stop
-		for co in coeffs:
-			p = p0.scaledBy(co[0]) + p1.scaledBy(co[1]) + p2.scaledBy(co[2]) +  p3.scaledBy(co[3])
-			points.append(p)
-		return points
-
-
-	def getInterPointsWithTangent(self, offset):
-		"""
-			get interpoints and tangents with Bernstein coefficients
-			Return array of arrays (each one contains point and derivative)
-		"""
-		#print('--------------------------------------------------------------')
-		ret = []
-		numPoints = int(1.0 / offset)
-		coeffsArr = ZBezier3Segment.getBernsteinCoefficients(numPoints)
-		coFunction = coeffsArr[0]
-		coDerivative = coeffsArr[1]
-		p0 = self.m_start
-		p1 = self.m_handleStart
-		p2 = self.m_handleStop
-		p3 = self.m_stop
-
-		d0 = p1 - p0
-		d1 = p2 - p1
-		d2 = p3 - p2
-		idx = 0
-		for coF in coFunction:
-			pF = p0.scaledBy(coF[0]) + p1.scaledBy(coF[1]) + p2.scaledBy(coF[2]) +  p3.scaledBy(coF[3])
-			coD = coDerivative[idx]
-			pD = d0.scaledBy(coD[0]) + d1.scaledBy(coD[1]) + d2.scaledBy(coD[2])
-			if pD.isSameAs(Point()):
-				# we have a zero derivative, possible at start or end or for degenerated segment
-				if idx == 0:
-					ret.append([pF, self.getTangentAtStart()])
-				else:
-					# handle all other degenerate cases (might raise exception)
-					ret.append([pF, self.getTangentAtStop()])
-			else:
-				ret.append([pF, pD])
-			idx += 1
-		return ret
-
-
-	def getInterPointsWithTangentDeCasteljau(self, offset):
-		"""
-			Return array of arrays (each one contains point and derivative)
-		"""
-		points = []
-		fact = 0.0
-		while fact < 1:
-			points.append(self.deCasteljau3WithTangent(fact))
-			fact = fact + offset
-		return points
-
-
-	def getInterPointWithTangent(self, param):
-		return self.deCasteljau3WithTangent(param)
+		self.recalculateGeometry()
 
 
 	def copy(self):
@@ -721,6 +750,7 @@ class ZBezier3Segment(ZPathSegment):
 		self.m_stop = affine * self.m_stop
 		self.m_handleStart = affine * self.m_handleStart
 		self.m_handleStop = affine * self.m_handleStop
+		self.recalculateGeometry()
 
 
 	def xmlAddDetailsTo(self, node):
@@ -748,11 +778,34 @@ class ZBezier3Segment(ZPathSegment):
 
 class ZBezier2Segment(ZPathSegment):
 	"""
-		a cubic bezier segment
+		a quadratic bezier segment
 	"""
-	def __init__(self, p1, p2, h):
+	def __init__(self, p1, p2, handle):
 		super().__init__(p1, p2)
-		self.m_handle = h
+		self.m_handle = handle
+		self.m_bernsteinPoints = []
+		self.recalculateGeometry()
+
+
+
+	def recalculateGeometry(self):
+		p1 = self.m_start
+		p2 = self.m_stop
+		handle = self.m_handle
+		self.m_bernsteinPoints = []
+		self.m_bernsteinPoints.append(p1 - handle.scaledBy(2) + p2)
+		self.m_bernsteinPoints.append((handle - p1).scaledBy(2))
+		self.m_bernsteinPoints.append(p1)
+
+		self.m_normal = Plane(p1, handle, p2).m_normal
+
+
+	def reverse(self):
+		p1 = self.m_start
+		p2 = self.m_stop
+		self.m_start = p2
+		self.m_stop = p1
+		self.recalculateGeometry()
 
 
 	@classmethod
@@ -764,56 +817,35 @@ class ZBezier2Segment(ZPathSegment):
 		return ZBezier2Segment(start, stop, handle)
 
 
-
 	def makeFlat(self):
 		super().makeFlat()
 		self.m_handle.m_z = 0
+	
 
+	def pointAtParam(self, t):
+		'''
+			return the point that is given by the param
+		'''
+		return self.m_bernsteinPoints[0].scaledBy(t*t) + self.m_bernsteinPoints[1].scaledBy(t) + self.m_bernsteinPoints[2]
+	
 
-	def deCasteljau2(self, t):
-		startToHandle = self.interpolate(self.m_start, self.m_handle, t)
-		handleToStop = self.interpolate(self.m_handle, self.m_stop, t)
-		return self.interpolate(startToHandle, handleToStop, t)
+	def tangentAtParam(self, t):
+		'''
+			return the tangent direction through the point that is given by the param
+		'''
+		return self.m_bernsteinPoints[0].scaledBy(2*t) + self.m_bernsteinPoints[1]
+	
 
-
-	def getInterPointAtParameter(self, t):
-		return self.deCasteljau2(t)
+	def secondDerivativeAtParam(self, t):
+		'''
+			return the second derivation direction through the point that is given by the param
+		'''
+		return self.m_bernsteinPoints[0].scaledBy(2)
 
 
 	def interpolate(self, p1, p2, t):
 		diff = (p2 - p1).scaledBy(t)
 		return p1 + diff
-
-
-	def getInterPoints(self, offset):
-		points = []
-		fact = 0.0
-		while fact < 1:
-			points.append(self.deCasteljau2(fact))
-			fact = fact + offset
-		return points
-
-
-	def getInterPointsWithTangent(self, offset):
-		points = []
-		fact = 0.0
-		while fact < 1:
-			points.append(self.deCasteljau2WithTangent(fact))
-			fact = fact + offset
-		return points
-
-
-	def deCasteljau2WithTangent(self, t):
-		# return the quadratic bezierpoint for a given t (between 0 and 1)
-		# additional return the tangent direction in this point (pointing to greater t)
-		startToHandle = self.interpolate(self.m_start, self.m_handle, t)
-		handleToStop = self.interpolate(self.m_handle, self.m_stop, t)
-		point = self.interpolate(startToHandle, handleToStop, t)
-		return [point, handleToStop - startToHandle]
-
-
-	def getInterPointWithTangent(self, param):
-		return self.deCasteljau2WithTangent(param)
 
 
 	def copy(self):
@@ -831,6 +863,7 @@ class ZBezier2Segment(ZPathSegment):
 		#print('')
 		self.m_stop = affine * self.m_stop
 		self.m_handle = affine * self.m_handle
+		self.recalculateGeometry()
 
 
 	def xmlAddDetailsTo(self, node):
@@ -842,6 +875,14 @@ class ZBezier2Segment(ZPathSegment):
 		points = [self.m_start, self.m_handle, self.m_stop]
 		poly = Polygon(points)
 		return poly.isClockWise(Point(0, 0, 1))
+	
+
+	def svgCode(self, rounded):
+		ret = 'Q '
+		ret += ZPathSegment.pointString(self.m_handle, rounded)
+		ret += ZPathSegment.pointString(self.m_stop, rounded)
+		return ret
+
 
 ####################################################
 ####################################################
@@ -852,10 +893,11 @@ class ZArcSegment(ZPathSegment):
 		an svg arc segment. In 2d it matches the svg arc. Can also be used in 3d,
 		BUT: it can only be transformed by orthogonal matrixes reliably. 
 	"""
-	def __init__(self, p1, p2, ellipse3, largeArc):
+	def __init__(self, p1, p2, ellipse3, largeArc, clockWise=None):
 		super().__init__(p1, p2)
 		
 		self.m_largeArc = largeArc
+		self.m_clockWise = clockWise
 		self.adaptToEllipse(ellipse3)		
 		
 
@@ -868,15 +910,27 @@ class ZArcSegment(ZPathSegment):
 		self.m_startAngle = self.m_ellipse.angleForPoint(self.m_start)
 
 		self.m_stopAngle = self.m_ellipse.angleForPoint(self.m_stop)
+		if self.m_stopAngle is None or self.m_startAngle is None:
+			raise Exception('ZArcSegment::adaptToEllipse brings illegal start/stop Angle')
 		delta = ZGeomItem.normalizeAngle(self.m_stopAngle - self.m_startAngle)
+		self.m_deltaAngle = delta
 		largeArc = self.m_largeArc
-		if (delta < 180 and largeArc) or (delta > 180 and not largeArc):
+		if self.isHalfEllipse() and self.m_clockWise is not None:
+			self.m_deltaAngle = 180
+			if self.isClockWise() != self.m_clockWise:
+				delta = -180
+		elif (delta < 180 and largeArc) or (delta > 180 and not largeArc):
 			delta = 360 - delta
 		
 		if not ZGeomItem.almostEqualAngles(self.m_startAngle + delta, self.m_stopAngle):
 			delta = -delta
 
 		self.m_deltaAngle = delta
+
+		normal = self.m_ellipse.getNormale()
+		if self.m_deltaAngle < 0:
+			normal = - normal
+		self.m_normal = normal
 
 		self.selfTest()
 
@@ -894,7 +948,7 @@ class ZArcSegment(ZPathSegment):
 		p2X = affine*p2
 		circle3 = cls.calculateArcEllipse(rx, ry, p1X, p2X, largeArc, sweepClockWise)
 
-		ret = ZArcSegment(p1X, p2X, circle3, largeArc)
+		ret = ZArcSegment(p1X, p2X, circle3, largeArc, sweepFlagClockWise)
 		
 		# rotate ret back to real position:
 		affInverse = affine.inverted()
@@ -915,6 +969,10 @@ class ZArcSegment(ZPathSegment):
 			# if they are not defined, we search over the whole ellipse
 			return [0, 360, 360]
 		return [self.m_startAngle, self.m_stopAngle, self.m_deltaAngle]
+	
+
+	def isHalfEllipse(self):
+		return ZGeomItem.almostEqual(abs(self.m_deltaAngle), 180)
 
 
 	def selfTest(self):
@@ -931,15 +989,17 @@ class ZArcSegment(ZPathSegment):
 			raise Exception(msg)
 
 		startA = self.m_startAngle
-		pStart = self.getPointForParameter(startA)
-		pStop = self.getPointForParameter(self.m_stopAngle)
+		pStart = self.pointAtAngle(startA)
+		pStop = self.pointAtAngle(self.m_stopAngle)
 		#if not pStart.isSameAs(self.m_start) or not pStop.isSameAs(self.m_stop):
 		if not self.pointsAreNear(pStart, self.m_start) or not self.pointsAreNear(pStop, self.m_stop):
 			raise Exception('ZArcSegment:selfTest error: parameter problem')
+		
+		if self.isHalfEllipse() and self.m_clockWise is None:
+			raise Exception('ZArcSegment:selfTest error: for 180 degrees clockWise must be given')
 
 
 	@classmethod
-	# create 4 quarter circles
 	def createFullCircle2(cls, center, radius, clockwise):
 		'''
 			Create a path with a full circle in 2d, made from 4 arcs
@@ -978,6 +1038,9 @@ class ZArcSegment(ZPathSegment):
 
 	@classmethod
 	def createFullCircleRing(cls, center, radiusOuter, radiusInner):
+		'''
+			Return a path that describes a ring of 2 circles
+		'''
 		path1 = cls.createFullCircle(center, radiusOuter, True)
 		path2 = cls.createFullCircle(center, radiusInner, False)
 		for seg in path2.m_segments:
@@ -987,6 +1050,9 @@ class ZArcSegment(ZPathSegment):
 
 	@classmethod
 	def createFullEllipseRing(cls, center, radiusOuterX, radiusOuterY, radiusInnerX, radiusInnerY, angle):
+		'''
+			Return a path that describes a ring of 2 circles
+		'''
 		path1 = cls.createFullEllipse(center, radiusOuterX, radiusOuterY, angle, True)
 		path2 = cls.createFullEllipse(center, radiusInnerX, radiusInnerY, angle, False)
 		for seg in path2.m_segments:
@@ -995,7 +1061,9 @@ class ZArcSegment(ZPathSegment):
 
 
 	def svgCode(self, rounded):
-		# return a string that is usable as the d-attribute of a path node
+		'''
+			return a string that is usable as the d-attribute of a path node
+		'''
 		ret = 'A '
 		rounded = 5
 		ret += str(round(self.m_rx, rounded)) + ' '
@@ -1014,7 +1082,7 @@ class ZArcSegment(ZPathSegment):
 
 
 	def copy(self):
-		return ZArcSegment(self.m_start.copy(), self.m_stop.copy(), self.m_ellipse.copy(), self.m_largeArc)
+		return ZArcSegment(self.m_start.copy(), self.m_stop.copy(), self.m_ellipse.copy(), self.m_largeArc, self.m_clockWise)
 
 
 	def printComment(self, comment, tabs=0, rounded=2):
@@ -1040,6 +1108,8 @@ class ZArcSegment(ZPathSegment):
 
 	def reverse(self):
 		super().reverse()
+		if self.m_clockWise is not None:
+			self.m_clockWise = not self.m_clockWise
 		self.m_ellipse.reverse()
 		self.adaptToEllipse(self.m_ellipse)
 
@@ -1050,19 +1120,41 @@ class ZArcSegment(ZPathSegment):
 		'''
 		angle = self.m_ellipse.angleForPoint(point)
 		return Point(1).angleTo(point)
+	
+
+	def angleForParam(self, param):
+		if abs(param) > 1:
+			msg = f'ZArcSegment: suspicious param used {param}'
+			raise Exception(msg)
+		return self.m_startAngle + self.m_deltaAngle * param
 
 
-	def getPointForParameter(self, angle):
+	def pointAtParam(self, param):
+		'''
+			return the point that is given by the param
+		'''
+		return self.m_ellipse.pointForAngle(self.angleForParam(param))
+	
+
+	def tangentAtParam(self, param):
+		'''
+			return the tangent direction through the point that is given by the param
+		'''
+		ret = self.m_ellipse.tangentForAngle(self.angleForParam(param))
+		if self.m_deltaAngle < 0:
+			ret = ret.scaledBy(-1)
+		return ret
+	
+
+	def secondDerivativeAtParam(self, param):
+		'''
+			return the second derivation direction through the point that is given by the param
+		'''
+		return self.m_ellipse.secondDerivativeForAngle(self.angleForParam(param))
+	
+
+	def pointAtAngle(self, angle):
 		return self.m_ellipse.pointForAngle(angle)
-
-
-	def getInterPointAtParameter(self, t):
-		return self.getPointForParameter(t)
-
-
-	def getPointForParameterWithTangent(self, angle):
-		ell = self.m_ellipse
-		return [ell.pointForAngle(angle), ell.tangentForAngle(angle)]
 
 
 	def getBiggerRadius(self):
@@ -1073,57 +1165,29 @@ class ZArcSegment(ZPathSegment):
 
 
 	def belongsToSameEllipse(self, otherArc):
-		return self.m_ellipse.isSameAs(otherArc.m_ellipse)
+		if not self.m_ellipse.isSameAs(otherArc.m_ellipse):
+			return False
+		return self.isClockWise() == otherArc.isClockWise()
 
 
 	def transformBy(self, affine):
+		'''
+			transform myself, return nothing
+		'''
 		self.m_start = affine * self.m_start
 		self.m_stop = affine * self.m_stop
 		newEllipse = affine * self.m_ellipse
+		if self.m_clockWise is not None:
+			if not affine.m_matrix.preservesOrientation:
+				self.m_clockWise = not self.m_clockWise
 		self.adaptToEllipse(newEllipse)
-
-
-	def getInterPoints(self, offset):
-		'''
-			return a list of my points with the given parameter step
-			offset is the step width (0.0 < offset < 1.0)
-			make as many steps as possible before reaching 1.0
-		'''
-		points = []
-		angle = self.m_startAngle
-		numberOfSteps = 1.0 / offset
-		stepAngle = self.m_deltaAngle / numberOfSteps
-		stepNo = 0
-		while stepNo < numberOfSteps:
-			ownPoint = self.getPointForParameter(angle)
-			#ownPoint.printComment(str(stepNo))
-			points.append(ownPoint)
-			angle = angle + stepAngle
-			stepNo = stepNo + 1
-		return points
 
 
 	def getMyMiddlePoint(self):
 		"""
 			Return the point on my graph with the middle parameter (angle) value
 		"""
-		return self.getPointForParameter(self.m_startAngle + 0.5 * self.m_deltaAngle)
-
-
-	def getInterPointsWithTangent(self, offset):
-		
-		points = []
-		angle = self.m_startAngle
-		numberOfSteps = 1.0 / offset
-		stepAngle = self.m_deltaAngle / numberOfSteps
-		stepNo = 0
-		while stepNo < numberOfSteps:
-			ownPoint, ownTan = self.getPointForParameterWithTangent(angle)
-			#ownPoint.printComment('step ' + str(stepNo))
-			points.append([ownPoint, ownTan])
-			angle = angle + stepAngle
-			stepNo = stepNo + 1
-		return points
+		return self.pointAtParam(0.5)
 
 
 	def getInterPointWithTangent(self, param):
@@ -1226,7 +1290,8 @@ class ZArcSegment(ZPathSegment):
 			r = x1d * x1d / (rx * rx) + y1d * y1d / (ry * ry)
 			r = 1 / r - 1
 		#elif r != 0:
-		elif abs(r) > ZGeomItem.s_wantedAccuracy:
+		# this might be a little problem: (dont know the exact valid range!!)
+		elif abs(r) > ZGeomItem.s_wantedAccuracy / 100:
 			r = 1 / r - 1
 		#if -1e-10 < r < 0:
 		if -ZGeomItem.s_wantedAccuracy < r < 0:
@@ -1392,26 +1457,36 @@ class ZPath:
 		self.reverse()
 
 
-	def getInterPoints(self, step):
+	def getAllInterPoints(self, paramStep):
 		"""
 			Return a list of [points with given parameter step width
 		"""
 		points = []
 		for seg in self.m_segments:
-			newOnes = seg.getInterPoints(step)
+			newOnes = seg.getAllInterPoints(paramStep)
 			if len(points) > 0 and points[-1].isSameAs(newOnes[0]):
 				points.pop()
 			points.extend(newOnes)
 		return points
 
 
-	def getInterPointsWithTangent(self, step):
+	def getAllInterPointsWithTangent(self, paramStep):
 		"""
-			Return a list of arrays with [point, tangent] with given parameter step width
+			Return a list of tuples with (point, tangent) with given parameter step width
 		"""
 		points = []
 		for seg in self.m_segments:
-			points.extend(seg.getInterPointsWithTangent(step))
+			points.extend(seg.getAllInterPointsWithTangent(paramStep))
+		return points
+	
+	
+	def getAllInterPointsAndDerivs(self, paramStep):
+		"""
+			Return a list of tuples with (point, tangent) with given parameter step width
+		"""
+		points = []
+		for seg in self.m_segments:
+			points.extend(seg.getAllInterPointsAndDerivs(paramStep))
 		return points
 
 
@@ -1632,13 +1707,15 @@ class ZPath:
 			cncList = seg.cncFriendly(tolerance)
 			for c in cncList:
 				ret.addSegment(c)
+		if not ret.areSegsConnected():
+			raise Exception('ZPath::cncFriendly created non-connected path')
 		return ret
 
 
-	def cncFriendlySimple(self):
+	def cncFriendlySimple(self, num):
 		ret = ZPath()
 		for seg in self.m_segments:
-			cncList = seg.cncFriendlySimple()
+			cncList = seg.cncFriendlySimple(num)
 			for c in cncList:
 				ret.addSegment(c)
 		return ret

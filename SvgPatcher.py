@@ -86,10 +86,12 @@ class SvgWriter:
 		self.m_height = height
 
 
-	def write(self):
+	def write(self, targetFile=None):
 		#self.m_tree.write('svg/raw.svg', "utf-8") # used for debugging
-		pretty = self.prettify(self.m_root)
-		with open(self.m_targetFile, 'wb') as f:	# use 'wb', as prettify returns a byte string
+		if targetFile is not None:
+			self.m_targetFile = targetFile
+		pretty = self.svgString(True)
+		with open(self.m_targetFile, 'w') as f:	# use 'wb', as prettify returns a byte string
 			f.write(pretty)
 
 
@@ -146,12 +148,12 @@ class SvgWriter:
 		return self.m_root
 	
 
-	def addPath(self, parent, dAttribute, strokeWidth=1, stroke='black', fill='none'):
+	def addPath(self, parent, pathObject, strokeWidth=1, stroke='black', fill='none'):
 		path = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'path')
 		path.set('stroke', stroke)
 		path.set('stroke-width', str(strokeWidth))
 		path.set('fill', fill)
-		path.set('d', dAttribute)
+		path.set('d', pathObject.svgCode())
 		return path
 
 
@@ -166,12 +168,13 @@ class SvgWriter:
 		return circle
 
 
-	def addLine(self, parent, x1, y1, x2, y2, strokeWidth=1, strokeColor='black'):
+	#def addLine(self, parent, x1, y1, x2, y2, strokeWidth=1, strokeColor='black'):
+	def addLine(self, parent, p1, p2, strokeWidth=1, strokeColor='black'):
 		line = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'line')
-		line.set('x1', str(x1))
-		line.set('x2', str(x2))
-		line.set('y1', str(y1))
-		line.set('y2', str(y2))
+		line.set('x1', str(p1.m_x))
+		line.set('y1', str(p1.m_y))
+		line.set('x2', str(p2.m_x))
+		line.set('y2', str(p2.m_y))
 		line.set('stroke', strokeColor)
 		line.set('stroke-width', str(strokeWidth))
 		return line
@@ -187,6 +190,19 @@ class SvgWriter:
 		rect.set('stroke-width', str(strokeWidth))
 		rect.set('fill', fill)
 		return rect
+	
+
+	def addText(self, parent, msg, pos, offset=None, font=None, fontSize=None, fill='black'):
+		text = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'text')
+		text.text = msg
+		text.set('x', str(pos.m_x))
+		text.set('y', str(pos.m_y))
+		text.set('fill', fill)
+		if font is not None:
+			text.set('font', font)
+		if fontSize is not None:
+			text.set('font-size', str(fontSize))
+
 
 
 ##########################################################

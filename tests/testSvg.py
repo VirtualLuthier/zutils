@@ -13,6 +13,7 @@ from context import zutils, testInFolder, testOutFolder
 
 from zutils.ZGeom import ZGeomItem, Point, Line
 from zutils.SvgReader import SvgPathReader
+from zutils.SvgPatcher import SvgWriter
 from zutils.ZPath import ZArcSegment
 from zutils.ZMatrix import Matrix, Affine
 from zutils.ZGeomHelper import ZGeomHelper
@@ -34,14 +35,14 @@ class TestSvg(unittest.TestCase):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		# now create the output folders
-		#folder = os.path.dirname(os.path.abspath(__file__))
-		#folder = os.path.dirname(folder) + '/test-out'
+		folderRoot = os.path.dirname(os.path.abspath(__file__))
+		folderRoot = os.path.join(folderRoot, 'test-out')
 		#if not os.path.isdir(folder):
 		#	os.mkdir(folder)
-		folder = os.path.join(testOutFolder, '/testSvg')
-		if not os.path.isdir(folder):
-			os.mkdir(folder)
-		self.s_outputRootFolder = folder
+		outFolder = os.path.join(folderRoot, 'testSvg')
+		if not os.path.isdir(outFolder):
+			os.mkdir(outFolder)
+		self.s_outputRootFolder = outFolder
 		self.s_testInFolder = os.path.join(testInFolder, 'svg')
 
 
@@ -69,6 +70,19 @@ class TestSvg(unittest.TestCase):
 #		#print('length of cncPath: ' + str(len(cncPath.m_segments)))
 
 
+	def test_cncFriendly(self):
+		dAttribute = 'M 10 100 C 0 0 80 0 100 90'
+		path = SvgPathReader.classParsePath(dAttribute)
+		fName = os.path.join(self.s_outputRootFolder, 'testCNCFriendly.svg')
+		svgWriter = SvgWriter('mm')
+		svgWriter.addPath(None, path)
+
+		friendly = path.cncFriendly(0.05)
+		svgWriter.addPath(None, friendly, stroke='red')
+		#friendly.printComment('cncFriendly')
+		print(f'number Of Segments = {len(friendly.m_segments)}')
+
+		svgWriter.write(fName)
 
 	def test_05_arcs1(self):
 
@@ -122,6 +136,187 @@ class TestSvg(unittest.TestCase):
 		xmlReader.parsePath(dAttribute)
 		ellipses = xmlReader.m_circles
 		self.assertEqual(len(ellipses), 2)
+
+
+	def test_BezierSimple(self):
+		dAttribute = 'M 10 100 C 0 0 80 0 100 90'
+		path = SvgPathReader.classParsePath(dAttribute)
+		fName = os.path.join(self.s_outputRootFolder, 'testPoints.svg')
+		svgWriter = SvgWriter('mm')
+		svgWriter.addPath(None, path)
+
+		simple = path.cncFriendlySimple(5)
+		svgWriter.addPath(None, simple, stroke='red')
+
+		svgWriter.write(fName)
+
+
+	def test_halfArcs(self):
+		'''
+			test arcs with 180 degrees sweepAngle
+		'''
+		dAttribute1 = 'M 0 100 A 50 50 0 0 0 0 0'	# CCW
+		dAttribute2 = 'M 100 100 A 50 50 0 0 1 100 0'	# CW
+
+		fName = os.path.join(self.s_outputRootFolder, 'testHalfArc.svg')
+		svgWriter = SvgWriter('mm')
+
+		path1 = SvgPathReader.classParsePath(dAttribute1)
+		svgWriter.addPath(None, path1)
+		self.checkArcFlags(path1, Point(0, 50), Point(0, 50), False, -180)
+
+		path2 = SvgPathReader.classParsePath(dAttribute2)
+		self.checkArcFlags(path2, Point(100, 50), Point(100, 50), True, 180)
+		svgWriter.addPath(None, path2)
+
+		svgWriter.write(fName)
+
+
+	def test_CircleTangents(self):
+		'''
+			test osculatingCircles of circles
+		'''
+		#dAttribute = 'M 10 100 C 0 0 80 0 100 90'		# Cubic bezier
+		#dAttribute = 'M 10 100 Q 80 0 100 90'			# quadratic bezier
+		#dAttribute = 'M 10 100 A 80 80 0 0 0 100 50'	# CCW
+		#dAttribute = 'M 10 100 A 80 80 0 0 1 100 50'	# CW
+		dAttribute1 = 'M 50 100 A 50 50 0 0 0 0 50'	# CCW
+		dAttribute2 = 'M 150 100 A 50 50 0 0 1 100 50'	# CW
+
+		fName = os.path.join(self.s_outputRootFolder, 'testCircleTangents.svg')
+		svgWriter = SvgWriter('mm')
+		
+		paths = []
+		num = 0
+
+		for dAttribute in [dAttribute1, dAttribute2]:
+			path = SvgPathReader.classParsePath(dAttribute)
+			paths.append(path)
+			#path.printComment('CW Arc')
+
+			svgWriter.addPath(None, path, stroke='red')
+			#svgWriter.write(fName)
+			#return
+
+			simple = path.cncFriendlySimple(5)
+			svgWriter.addPath(None, simple, stroke='blue')
+
+			pointsAndTangents = path.getAllInterPointsWithTangent(0.2)
+			for (point, tangent) in pointsAndTangents:
+				tangent = tangent.scaledTo(20)
+				svgWriter.addLine(None, point, point + tangent, strokeColor='green')
+
+			derivs = path.getAllInterPointsAndDerivs(0.2)
+			for deriv in derivs:
+				circle = deriv[2]
+				wantedCenter = Point(0, 100) if num == 0 else Point(150, 50)
+				self.checkIsSamePoint(circle.m_center, wantedCenter)
+				svgWriter.addCircle(None, circle, strokeWidth=0.2, stroke='gray')
+
+			num += 1
+
+		svgWriter.write(fName)
+
+
+	def test_BezierTangents(self):
+		'''
+			test osculatingCircles of circles
+		'''
+		self.checkOneBezierTangents('M 0 100 C 0 0 80 0 100 90', 'testBezier3Tangents.svg')
+		self.checkOneBezierTangents('M 150 100 Q 80 0 100 90', 'testBezier2Tangents.svg')
+
+
+	def checkOneBezierTangents(self, dAttribute, fNameRoot):
+		#dAttribute1 = 'M 0 100 C 0 0 80 0 100 90'		# Cubic bezier
+		#dAttribute2 = dAttribute1	# 'M 150 100 Q 80 0 100 90'			# quadratic bezier
+
+		fName = os.path.join(self.s_outputRootFolder, fNameRoot)
+		svgWriter = SvgWriter('mm')
+
+		svgWriter.addText(None, 'Please check direction of tangents and position of osculating circles', Point(100), fontSize='0.5em')
+		
+		paths = []
+		num = 0
+
+		path1 = SvgPathReader.classParsePath(dAttribute)
+		paths.append(path1)
+
+		affShift = Affine(None, Point(150))
+		path2 = path1.transformedBy(affShift)
+		path2.reverse()
+		paths.append(path2)
+
+		for path in paths:
+			#path.printComment('CW Arc')
+
+			svgWriter.addPath(None, path, stroke='red')
+			#svgWriter.write(fName)
+			#return
+
+			simple = path.cncFriendlySimple(5)
+			svgWriter.addPath(None, simple, stroke='blue')
+
+			pointsAndTangents = path.getAllInterPointsWithTangent(0.2)
+			for (point, tangent) in pointsAndTangents:
+				tangent = tangent.scaledTo(20)
+				svgWriter.addLine(None, point, point + tangent, strokeColor='green')
+
+			derivs = path.getAllInterPointsAndDerivs(0.2)
+			for deriv in derivs:
+				circle = deriv[2]
+				#wantedCenter = Point(0, 100) if num == 0 else Point(150, 50)
+				#self.checkIsSamePoint(circle.m_center, wantedCenter)
+				svgWriter.addCircle(None, circle, strokeWidth=0.2, stroke='gray')
+
+			num += 1
+
+		svgWriter.write(fName)
+
+
+	def test_ellipseTangents(self):
+		'''
+			test osculatingCircles of circles
+		'''
+		#dAttribute = 'M 10 100 C 0 0 80 0 100 90'		# Cubic bezier
+		#dAttribute = 'M 10 100 Q 80 0 100 90'			# quadratic bezier
+		#dAttribute = 'M 10 100 A 80 80 0 0 0 100 50'	# CCW
+		#dAttribute = 'M 10 100 A 80 80 0 0 1 100 50'	# CW
+		dAttribute1 = 'M 50 100 A 60 40 0 0 0 0 50'	# CCW
+		dAttribute2 = 'M 150 100 A 40 60 0 0 1 100 50'	# CW
+
+		fName = os.path.join(self.s_outputRootFolder, 'testEllipseTangents.svg')
+		svgWriter = SvgWriter('mm')
+		
+		paths = []
+		num = 0
+
+		for dAttribute in [dAttribute1, dAttribute2]:
+			path = SvgPathReader.classParsePath(dAttribute)
+			paths.append(path)
+			#path.printComment(f'Arc {num}')
+
+			svgWriter.addPath(None, path, stroke='red')
+			#svgWriter.write(fName)
+			#return
+
+			simple = path.cncFriendlySimple(5)
+			svgWriter.addPath(None, simple, stroke='blue')
+
+			pointsAndTangents = path.getAllInterPointsWithTangent(0.2)
+			for (point, tangent) in pointsAndTangents:
+				tangent = tangent.scaledTo(20)
+				svgWriter.addLine(None, point, point + tangent, strokeColor='green')
+
+			derivs = path.getAllInterPointsAndDerivs(0.2)
+			for deriv in derivs:
+				circle = deriv[2]
+				wantedCenter = Point(0, 100) if num == 0 else Point(150, 50)
+				#self.checkIsSamePoint(circle.m_center, wantedCenter)
+				svgWriter.addCircle(None, circle, strokeWidth=0.2, stroke='gray')
+
+			num += 1
+
+		svgWriter.write(fName)
 
 
 	def xtest_bezier2(self):
@@ -213,25 +408,25 @@ class TestSvg(unittest.TestCase):
 		lArc = 0	# take short arc
 		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
 		path = SvgPathReader.classParsePath(dAttribute)
-		self.checkPathFlags(path, Point(), Point(100, 100), True, 90)
+		self.checkArcFlags(path, Point(), Point(100, 100), True, 90)
 
 		CW = 0 # means CCW
 		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
 		path = SvgPathReader.classParsePath(dAttribute)
-		self.checkPathFlags(path, Point(100, 100), Point(), False, -90)
+		self.checkArcFlags(path, Point(100, 100), Point(), False, -90)
 
 		lArc = 1	# take long arc
 		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
 		path = SvgPathReader.classParsePath(dAttribute)
-		self.checkPathFlags(path, Point(), Point(100, 100), False, -270)
+		self.checkArcFlags(path, Point(), Point(100, 100), False, -270)
 
 		CW = 1	# additionally set CW
 		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
 		path = SvgPathReader.classParsePath(dAttribute)
-		self.checkPathFlags(path, Point(100, 100), Point(), True, 270)
+		self.checkArcFlags(path, Point(100, 100), Point(), True, 270)
 
 
-	def checkPathFlags(self, path, c1, c2, clockWise, delta):
+	def checkArcFlags(self, path, c1, c2, clockWise, delta):
 		#path.printComment('the path')
 		seg1 = path.m_segments[0]
 		
@@ -288,9 +483,9 @@ class TestSvg(unittest.TestCase):
 
 	def test_uprightEllipses(self):
 
-		dAttribute = 'M 0 0 A 50 100 0 0 0 100 0'
+		dAttribute = 'M 0 0 A 50 100 0 0 0 100 0'	# ccw
 		path = SvgPathReader.classParsePath(dAttribute)
-		self.checkPathFlags(path, Point(50), None, True, 180)
+		self.checkArcFlags(path, Point(50), None, False, -180)
 		#path.printComment('upright ellipse')
 
 	def test_arcFlags(self):
@@ -304,22 +499,22 @@ class TestSvg(unittest.TestCase):
 		lArc = 0	# take short arc
 		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
 		path = SvgPathReader.classParsePath(dAttribute, smartCircles=True)
-		self.checkPathFlags(path, Point(), Point(100, 100), True, 90)
+		self.checkArcFlags(path, Point(), Point(100, 100), True, 90)
 
 		CW = 0 # means CCW
 		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
 		path = SvgPathReader.classParsePath(dAttribute, smartCircles=False)
-		self.checkPathFlags(path, Point(100, 100), Point(), False, -90)
+		self.checkArcFlags(path, Point(100, 100), Point(), False, -90)
 
 		lArc = 1	# take long arc
 		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
 		path = SvgPathReader.classParsePath(dAttribute, smartCircles=False)
-		self.checkPathFlags(path, Point(), Point(100, 100), False, -270)
+		self.checkArcFlags(path, Point(), Point(100, 100), False, -270)
 
 		CW = 1	# additionally set CW
 		dAttribute = f'M {p1} A {radii} {lArc} {CW} {p2} A {radii} {lArc} {CW} {p1}'
 		path = SvgPathReader.classParsePath(dAttribute, smartCircles=False)
-		self.checkPathFlags(path, Point(100, 100), Point(), True, 270)
+		self.checkArcFlags(path, Point(100, 100), Point(), True, 270)
 
 
 ##################################################
