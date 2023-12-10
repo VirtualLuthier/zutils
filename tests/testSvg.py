@@ -46,9 +46,6 @@ class TestSvg(unittest.TestCase):
 		self.s_testInFolder = os.path.join(testInFolder, 'svg')
 
 
-
-
-
 	def xtest_00_lines(self):
 		# currently not used
 		dAttribute = 'M -50,50 50,50 0,-50 z'
@@ -71,7 +68,8 @@ class TestSvg(unittest.TestCase):
 
 
 	def test_cncFriendly(self):
-		dAttribute = 'M 10 100 C 0 0 80 0 100 90'
+		#dAttribute = 'M 10 100 C 0 0 80 0 100 90'			# has not turning point
+		dAttribute = 'M 0 100 C 25 50 75 150 100 100'		# has a turning point
 		path = SvgPathReader.classParsePath(dAttribute)
 		fName = os.path.join(self.s_outputRootFolder, 'testCNCFriendly.svg')
 		svgWriter = SvgWriter('mm')
@@ -145,7 +143,7 @@ class TestSvg(unittest.TestCase):
 		svgWriter = SvgWriter('mm')
 		svgWriter.addPath(None, path)
 
-		simple = path.cncFriendlySimple(5)
+		simple = path.asPolygon(5)
 		svgWriter.addPath(None, simple, stroke='red')
 
 		svgWriter.write(fName)
@@ -198,7 +196,7 @@ class TestSvg(unittest.TestCase):
 			#svgWriter.write(fName)
 			#return
 
-			simple = path.cncFriendlySimple(5)
+			simple = path.asPolygon(5)
 			svgWriter.addPath(None, simple, stroke='blue')
 
 			pointsAndTangents = path.getAllInterPointsWithTangent(0.2)
@@ -222,7 +220,8 @@ class TestSvg(unittest.TestCase):
 		'''
 			test osculatingCircles of circles
 		'''
-		self.checkOneBezierTangents('M 0 100 C 0 0 80 0 100 90', 'testBezier3Tangents.svg')
+		self.checkOneBezierTangents('M 0 100 C 0 0 80 0 100 90', 'testBezier3Tangents1.svg')		# without turning point
+		self.checkOneBezierTangents('M 0 100 C 25 50 75 150 100 100', 'testBezier3Tangents2.svg')	# with turning point
 		self.checkOneBezierTangents('M 150 100 Q 80 0 100 90', 'testBezier2Tangents.svg')
 
 
@@ -253,7 +252,7 @@ class TestSvg(unittest.TestCase):
 			#svgWriter.write(fName)
 			#return
 
-			simple = path.cncFriendlySimple(5)
+			simple = path.asPolygon(5)
 			svgWriter.addPath(None, simple, stroke='blue')
 
 			pointsAndTangents = path.getAllInterPointsWithTangent(0.2)
@@ -299,7 +298,7 @@ class TestSvg(unittest.TestCase):
 			#svgWriter.write(fName)
 			#return
 
-			simple = path.cncFriendlySimple(5)
+			simple = path.asPolygon(5)
 			svgWriter.addPath(None, simple, stroke='blue')
 
 			pointsAndTangents = path.getAllInterPointsWithTangent(0.2)

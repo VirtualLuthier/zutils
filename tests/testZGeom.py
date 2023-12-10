@@ -71,6 +71,25 @@ class TestZGeom(unittest.TestCase):
 		self.assertTrue(pz.crossProduct(px).isSameAs(py))
 
 
+	def testVectorAngle2(self):
+		tPoint = Point (1)
+		cases = [
+			(Point(1, 0), 0),
+			(Point(1, 1), -45),
+			(Point(0, 1), -90),
+			(Point(-1, 1), -135),
+			(Point(-1, 0), 180),
+			(Point(-1, -1), 135),
+			(Point(0, -1), 90),
+			(Point(1, -1), 45),
+		]
+		for case in cases:
+			angle = tPoint.vectorAngle2To(case[0])
+			if ZGeomItem.almostEqual(angle, -180):
+				angle = 180
+			self.assertAlmostEqual(angle, case[1])
+
+
 	def test_containsPointLine(self):
 		line = Line(Point(), Point(1))
 		p1 = Point(8)
@@ -273,7 +292,7 @@ class TestZGeom(unittest.TestCase):
 
 	def test_matrixOrtogonal(self):
 		m = TestZGeom.exampleMatrixOrthogonal()
-		self.assertTrue(m.isOrthonormal())
+		self.assertTrue(m.isOrthogonal())
 
 
 	def test_affineInverse(self):
@@ -289,21 +308,21 @@ class TestZGeom(unittest.TestCase):
 		self.assertTrue(shift.isSameAs(shift3))
 
 
-	def test_makeOrthonormalTransformation(self):
+	def test_makeOrthogonalTransformation(self):
 		px = Point(1, 1, 1)
-		m = Matrix.makeOrthonormalTransformation(px=px)
-		self.assertTrue(m.isOrthonormal())
+		m = Matrix.makeOrthogonalTransformation(px=px)
+		self.assertTrue(m.isOrthogonal())
 		self.assertTrue(m * Point(1).isSameAs(px.unit()))
 
 		py = px.anyPerpendicularPoint()
-		m = Matrix.makeOrthonormalTransformation(px=px, py=py)
-		self.assertTrue(m.isOrthonormal())
+		m = Matrix.makeOrthogonalTransformation(px=px, py=py)
+		self.assertTrue(m.isOrthogonal())
 		self.assertTrue(m * Point(1).isSameAs(px.unit()))
 		self.assertTrue(m * Point(0, 1).isSameAs(py.unit()))
 
 		pz = px.crossProduct(py)
-		m = Matrix.makeOrthonormalTransformation(px=px, py=py, pz=pz)
-		self.assertTrue(m.isOrthonormal())
+		m = Matrix.makeOrthogonalTransformation(px=px, py=py, pz=pz)
+		self.assertTrue(m.isOrthogonal())
 		self.assertTrue(m * Point(1).isSameAs(px.unit()))
 		self.assertTrue(m * Point(0, 1).isSameAs(py.unit()))
 		self.assertTrue(m * Point(0, 0, 1).isSameAs(pz.unit()))
@@ -494,7 +513,7 @@ class TestZGeom(unittest.TestCase):
 		line = Line(Point(23, 36), direction=Point(0, 0, 1))
 		for cone in cones:
 			aff = cone.makeAffToSimple()
-			self.assertTrue(aff.isOrthonormal())
+			self.assertTrue(aff.isOrthogonal())
 			affInvers = aff.inverted()
 			self.assertTrue((aff * affInvers).isSameAs(Affine()))
 			inter = cone.intersectLine(line)
@@ -515,7 +534,7 @@ class TestZGeom(unittest.TestCase):
 		line = Line(Point(23, 36), direction=Point(0, 0, 1))
 		for cone in cones:
 			aff = cone.makeAffToSimple()
-			self.assertTrue(aff.isOrthonormal())
+			self.assertTrue(aff.isOrthogonal())
 			affInvers = aff.inverted()
 			self.assertTrue((aff * affInvers).isSameAs(Affine()))
 			cone2 = cone.transformedBy(aff)
@@ -546,7 +565,7 @@ class TestZGeom(unittest.TestCase):
 		aff = Affine.morphLineToLine(line1, line2, point1, point2)
 		self.comparePoints(aff * point1, point2)
 		self.comparePoints((aff * line1.m_direction).unit(), line2.m_direction)
-		self.assertTrue(aff.m_matrix.isOrthonormal())
+		self.assertTrue(aff.m_matrix.isOrthogonal())
 
 
 	def xtest_ZCone(self):
@@ -599,15 +618,15 @@ class TestZGeom(unittest.TestCase):
 		v2 = c + diam2
 		v3 = c - diam1
 		v4 = c - diam2
-		self.comparePoints(v1, ell.pointForParam(0))
-		self.comparePoints(v2, ell.pointForParam(90))
-		self.comparePoints(v3, ell.pointForParam(180))
-		self.comparePoints(v4, ell.pointForParam(270))
+		self.comparePoints(v1, ell.pointForAngle(0))
+		self.comparePoints(v2, ell.pointForAngle(90))
+		self.comparePoints(v3, ell.pointForAngle(180))
+		self.comparePoints(v4, ell.pointForAngle(270))
 
 		#num = 20
 		#for ii in range(num):
 		#	par = (359 / num) * ii
-		#	pt = ell.pointForParam(par)
+		#	pt = ell.pointForAngle(par)
 		#	par2 = ell.paramForPoint(pt)
 		#	if math.isnan(par2):
 		#		ell.paramForPoint(pt)
@@ -648,12 +667,12 @@ class TestZGeom(unittest.TestCase):
 
 	def makeEulerCombination(self, ax, ay, az):
 		mx = Matrix.makeEulerRotation(ax, 'x')		
-		self.assertTrue(mx.isOrthonormal())
+		self.assertTrue(mx.isOrthogonal())
 		my = Matrix.makeEulerRotation(ay, 'y')
 		#my.printComment('my')
-		self.assertTrue(my.isOrthonormal())
+		self.assertTrue(my.isOrthogonal())
 		mz = Matrix.makeEulerRotation(az, 'z')
-		self.assertTrue(mz.isOrthonormal())
+		self.assertTrue(mz.isOrthogonal())
 		mCombined = mz * (my * mx)
 		return mCombined
 
@@ -661,7 +680,7 @@ class TestZGeom(unittest.TestCase):
 	def tryEulerAngles(self, ax, ay, az):
 		mCombined = self.makeEulerCombination(ax, ay, az)
 		#(mCombined * mCombined.transposed()).printComment('combined')
-		self.assertTrue(mCombined.isOrthonormal())
+		self.assertTrue(mCombined.isOrthogonal())
 		angles = mCombined.getEulerAngles()
 		#print(angles)
 		self.assertAlmostEqual(angles[0], ax)

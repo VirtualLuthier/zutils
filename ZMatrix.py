@@ -353,7 +353,7 @@ class Matrix(ZGeomItem):
 		return Matrix(lines)
 
 
-	def isOrthonormal(self) -> bool:
+	def isOrthogonal(self) -> bool:
 		'''
 			wrong name for isOrthogonal()
 		'''
@@ -549,8 +549,8 @@ class Affine(ZGeomItem):
 		return Affine(None, point) * ret * Affine(None, -point)
 
 
-	def isOrthonormal(self) -> bool:
-		return self.m_matrix.isOrthonormal()
+	def isOrthogonal(self) -> bool:
+		return self.m_matrix.isOrthogonal()
 
 
 	def getFloatListString(self, numFormat, numArray) -> list:

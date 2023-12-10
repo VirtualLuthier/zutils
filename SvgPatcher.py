@@ -1,5 +1,7 @@
 """
-	Contains only the class with the same name
+	Contains the classes:
+	- SvgWriter (create and populate an svg file)
+	- SvgPatcher (read an svg file and modify it)
 """
 
 import os
@@ -8,9 +10,20 @@ import xml.etree.ElementTree as ET
 from xml.dom import minidom
 import re
 
+from zutils.ZGeom import Point
+
 
 class SvgWriter:
-	def __init__(self, mmOrIn, createRoot=True, useNamespaces=True):
+	'''
+		Create an svg file and add elements like 
+		- path
+		- rect
+		- circle
+		- ellipse
+		- text
+		Also write the file afterwards
+	'''
+	def __init__(self, mmOrIn, createRoot=True, useNamespaces=True, targetFile=None):
 		'''
 				Create a node with the needed svg namespace settings and the viewport
 		'''
@@ -19,7 +32,6 @@ class SvgWriter:
 
 		self.m_namespaces = {}
 		if self.m_useNamespaces:
-			#self.m_namespaces = {'svg': 'http://www.w3.org/2000/svg'}
 			self.registerNamespace('', 'http://www.w3.org/2000/svg')
 			self.registerNamespace('svg', 'http://www.w3.org/2000/svg')
 			self.m_namespacePrefix = 'svg:'
@@ -31,7 +43,7 @@ class SvgWriter:
 		self.m_width = math.nan
 		self.m_height = math.nan
 
-		self.m_targetFile = None
+		self.m_targetFile = targetFile
 
 		if createRoot:
 			root = ET.Element('svg')
@@ -59,9 +71,11 @@ class SvgWriter:
 
 
 	def setAttribute(self, node, name, value):
-		# its a shame, this should not be needed
-		# registering namespaces seems to be useless for attributes
-		# for inkscape:label use {http://www.inkscape.org/namespaces/inkscape}:label
+		'''
+			its a shame, this should not be needed
+			registering namespaces seems to be useless for attributes
+			for inkscape:label use {http://www.inkscape.org/namespaces/inkscape}:label
+		'''
 		parts = name.split(':')
 		if len(parts) > 1:
 			space = self.m_namespaces[parts[0]]
@@ -71,19 +85,28 @@ class SvgWriter:
 		node.set(name, value)
 
 
-	def setSize(self, width, height, left=0, top=0):
-		self.m_width = width
-		self.m_height = height
-		self.m_left = left
-		self.m_top = top
+	def setSize(self, width, height, left=0, top=0, addFactor=0):
+		'''
+			Set the viewbox. Virtually use 1.0 dpi (or 1.0 dpmm). If addFactor > 0: add a margin
+		'''
 		root = self.m_root
-		root.set('width', f'{width}{self.m_unit}')
-		root.set('height', f'{height}{self.m_unit}')
-		root.set('viewBox', f'{left} {top} {width} {height}')
-		self.m_left = left
-		self.m_top = top
-		self.m_width = width
-		self.m_height = height
+		if addFactor > 0:
+			widthUsed = width*(1 + 2*addFactor)
+			heightUsed = height*(1 + 2*addFactor)
+			leftUsed = left - addFactor*width
+			topUsed = top - addFactor*width
+		else:
+			widthUsed = width
+			heightUsed = height
+			leftUsed = left
+			topUsed = top
+		root.set('width', f'{widthUsed}{self.m_unit}')
+		root.set('height', f'{heightUsed}{self.m_unit}')
+		root.set('viewBox', f'{leftUsed} {topUsed} {widthUsed} {heightUsed}')
+		self.m_left = leftUsed
+		self.m_top = topUsed
+		self.m_width = widthUsed
+		self.m_height = heightUsed
 
 
 	def write(self, targetFile=None):
@@ -91,7 +114,7 @@ class SvgWriter:
 		if targetFile is not None:
 			self.m_targetFile = targetFile
 		pretty = self.svgString(True)
-		with open(self.m_targetFile, 'w') as f:	# use 'wb', as prettify returns a byte string
+		with open(self.m_targetFile, 'w') as f:
 			f.write(pretty)
 
 
@@ -108,7 +131,6 @@ class SvgWriter:
 		return str(bString, 'utf-8')
 
 
-
 	def startGroup(self, parent=None, name=None):
 		if parent is None:
 			parent = self.m_root
@@ -120,6 +142,9 @@ class SvgWriter:
 
 	@classmethod
 	def makeIdFromString(cls, theString):
+		'''
+			Make a string that is usable as an id
+		'''
 		ret = ''
 		start = theString[0]
 		if not start.isalpha():
@@ -133,6 +158,9 @@ class SvgWriter:
 	
 
 	def getSizeFrom(self, node, attName):
+		'''
+			get a float number from the attribute value with the given name of this node. Else return math.nan
+		'''
 		val = node.get(attName)
 		if val is None:
 			return math.nan
@@ -143,12 +171,18 @@ class SvgWriter:
 	
 
 	def getNiceParent(self, parent):
+		'''
+			if parent is none, use my root node, else use the parent
+		'''
 		if parent is not None:
 			return parent
 		return self.m_root
 	
 
 	def addPath(self, parent, pathObject, strokeWidth=1, stroke='black', fill='none'):
+		'''
+			create an svg path
+		'''
 		path = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'path')
 		path.set('stroke', stroke)
 		path.set('stroke-width', str(strokeWidth))
@@ -158,6 +192,9 @@ class SvgWriter:
 
 
 	def addCircle(self, parent, circleObject, strokeWidth=1, stroke='black', fill='none'):
+		'''
+			crate an svg circle node (not a path arc)
+		'''
 		circle = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'circle')
 		circle.set('cx', str(circleObject.m_center.m_x))
 		circle.set('cy', str(circleObject.m_center.m_y))
@@ -166,10 +203,31 @@ class SvgWriter:
 		circle.set('stroke-width', str(strokeWidth))
 		circle.set('fill', fill)
 		return circle
+	
+
+	def addEllipse(self, parent, ellipseObject, xAngle, strokeWidth=1, stroke='black', fill='none'):
+		'''
+			create an svg ellipse node (not a path arc)
+		'''
+		ellipse = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'ellipse')
+		cx = ellipseObject.m_center.m_x
+		cy = ellipseObject.m_center.m_y
+		ellipse.set('cx', str(cx))
+		ellipse.set('cy', str(cy))
+		ellipse.set('rx', str(ellipseObject.m_diam1.length()))
+		ellipse.set('ry', str(ellipseObject.m_diam2.length()))
+		ellipse.set('stroke', stroke)
+		ellipse.set('stroke-width', str(strokeWidth))
+		ellipse.set('fill', fill)
+		if xAngle > 0:
+			ellipse.set('transform', f'rotate({xAngle}, {cx}, {cy})')	
+		return ellipse
 
 
-	#def addLine(self, parent, x1, y1, x2, y2, strokeWidth=1, strokeColor='black'):
 	def addLine(self, parent, p1, p2, strokeWidth=1, strokeColor='black'):
+		'''
+			create an svg line node from the 2 given points
+		'''
 		line = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'line')
 		line.set('x1', str(p1.m_x))
 		line.set('y1', str(p1.m_y))
@@ -181,6 +239,9 @@ class SvgWriter:
 
 
 	def addRect(self, parent, left, top, width, height, strokeWidth=1, stroke='black', fill='none'):
+		'''
+			crate an svg rect node
+		'''
 		rect = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'rect')
 		rect.set('x', str(left))
 		rect.set('y', str(top))
@@ -192,11 +253,14 @@ class SvgWriter:
 		return rect
 	
 
-	def addText(self, parent, msg, pos, offset=None, font=None, fontSize=None, fill='black'):
+	def addText(self, parent, msg, pos, offset=Point(), font=None, fontSize=None, fill='black'):
+		'''
+			create an svg text node
+		'''
 		text = ET.SubElement(self.getNiceParent(parent), self.m_namespacePrefix + 'text')
 		text.text = msg
-		text.set('x', str(pos.m_x))
-		text.set('y', str(pos.m_y))
+		text.set('x', str(pos.m_x+offset.m_x))
+		text.set('y', str(pos.m_y+offset.m_y))
 		text.set('fill', fill)
 		if font is not None:
 			text.set('font', font)

@@ -15,7 +15,7 @@ import math
 #from scipy.optimize import newton
 import xml.etree.ElementTree as ET
 
-from zutils.ZGeom import Point, Polygon, Line, Circle2, Ellipse3, ZGeomItem, Plane
+from zutils.ZGeom import Point, Polygon, Line, Circle2, Ellipse3, ZGeomItem, Plane, Cube
 from zutils.ZMatrix import Matrix, Affine
 #from zutils.ZGeomHelper import vectorAngle2		#, calculateArcEllipse
 #from zutils.shame import searchForEllipseCenter
@@ -50,12 +50,36 @@ class ZPathSegment:
 
 
 	def reversed(self):
-		"""
+		'''
 			Return a copy of me that is reversed
-		"""
+		'''
 		ret = self.copy()
 		ret.reverse()
 		return ret
+	
+
+	def getSimpleBoundingBox(self):
+		'''
+			return a cube that simply contains my start and stop points. 
+		'''
+		#Min = self.m_start.min(self.m_stop)
+		#Max = self.m_start.max(self.m_stop)
+		return Cube.makeCubeFromPoints([self.m_start, self.m_stop])
+		#return Cube(Min, Max)
+
+
+	def setStandardNormal(self):
+		tangent = self.tangentAtParam(0)
+		second = self.secondDerivativeAtParam(0)
+		self.m_normal = tangent.crossProduct(second)
+
+
+	def isFlat(self):
+		if not self.m_start.isFlat():
+			return False
+		if not self.m_stop.isFlat():
+			return False
+		return True
 
 
 	def makeFlat(self):
@@ -69,7 +93,7 @@ class ZPathSegment:
 	def getParameterRange(self):
 		"""
 			Return an array of 3 values for my parameter range, and difference
-			Overridden in subclass ZArcSegment
+			no longer overridden in subclass ZArcSegment
 		"""
 		return [0, 1, 1]
 
@@ -129,6 +153,12 @@ class ZPathSegment:
 			ret.append((self.pointAtParam(1), self.tangentAtParam(1)))
 
 		return ret
+	
+	def getOscilatingCircleAtParam(self, param):
+			point = self.pointAtParam(param)
+			tangent = self.tangentAtParam(param)
+			second = self.secondDerivativeAtParam(param)
+			return self.osculatingCircle(point, tangent, second)
 	
 
 	def getAllInterPointsAndDerivs(self, paramStep, addLast=True) -> list:
@@ -303,18 +333,18 @@ class ZPathSegment:
 		self.xmlAddDetailsTo(node)
 
 
-	def cncFriendlySimple(self, numPoints):
+	def asPolygon(self, numPoints):
 		"""
 			Return an array of Line segments that approximate myself. No precision given
 		"""
 		ps = self.getAllInterPoints(1 / numPoints)
-		ret = []
+		ret = ZPath()
 		lastPoint = None
 
 		for p1 in ps:
 			if lastPoint is not None:
 				line = ZLineSegment(lastPoint, p1)
-				ret.append(line)
+				ret.addSegment(line)
 			lastPoint = p1
 
 		return ret
@@ -520,6 +550,18 @@ class ZLineSegment(ZPathSegment):
 		A line between 2 points
 	"""
 
+	def __init__(self, p1, p2):
+		super().__init__(p1, p2)
+		self.m_bernsteinPoints = []
+		self.recalculateGeometry()
+
+
+	def recalculateGeometry(self):
+		self.m_bernsteinPoints.append(self.m_stop - self.m_start)
+		self.m_bernsteinPoints.append(self.m_start)
+		self.setStandardNormal()
+
+
 	def copy(self):
 		# caution: does not copy the points
 		return ZLineSegment(self.m_start, self.m_stop)
@@ -572,14 +614,16 @@ class ZLineSegment(ZPathSegment):
 		'''
 			return the point that is given by the param
 		'''
-		return self.m_start + (self.m_stop - self.m_start).scaledBy(t)
+		#return self.m_start + (self.m_stop - self.m_start).scaledBy(t)
+		return self.m_bernsteinPoints[0].scaledBy(t) + self.m_bernsteinPoints[1]
 	
 
-	def tangentAtParam(self, t):
+	def tangentAtParam(self, _):
 		'''
 			return the tangent direction through the point that is given by the param
 		'''
-		return self.m_stop - self.m_start
+		#return self.m_stop - self.m_start
+		return self.m_bernsteinPoints[0]
 
 
 	def secondDerivativeAtParam(self, _):
@@ -633,11 +677,9 @@ class ZBezier3Segment(ZPathSegment):
 		self.recalculateGeometry()
 
 
-
-
 	def recalculateGeometry(self):
 		'''
-			cacluate the bernstein points for calculation of points and derivatives
+			calcuate the bernstein points for calculation of points and derivatives
 			also recalculate my normal
 		'''
 		self.m_bernsteinPoints = []
@@ -645,25 +687,57 @@ class ZBezier3Segment(ZPathSegment):
 		p2 = self.m_stop
 		h1 = self.m_handleStart
 		h2 = self.m_handleStop
-		# quadratic curve between p1, h1, h2:
-		x1 = p1 - h1.scaledBy(2) + h2
-		x2 = (h1 - p1).scaledBy(2)
-		# quadratic curve between h1, h2, p2
-		y1 = h1 - h2.scaledBy(2) + p2
-		y2 = (h2 - h1).scaledBy(2)
-		# now combine x1, x2, y1, y2 for the cubic bezier
-		self.m_bernsteinPoints.append(y1 - x1)				# for t**3
-		self.m_bernsteinPoints.append(x1 - x2 + y2)			# for t**2
-		self.m_bernsteinPoints.append(x2 - p1 + h1)			# for t
-		self.m_bernsteinPoints.append(p1)					# constant
+
+		self.m_bernsteinPoints.append((h1 - h2).scaledBy(3) + p2 - p1)			# C0 for t**3
+		self.m_bernsteinPoints.append((p1 + h2).scaledBy(3) - h1.scaledBy(6))	# C1 for t**2
+		self.m_bernsteinPoints.append((h1 - p1).scaledBy(3))					# C2 for t**1
+		self.m_bernsteinPoints.append(p1)										# C4 for t**0
+		## quadratic curve between p1, h1, h2:
+		#x1 = p1 - h1.scaledBy(2) + h2
+		#x2 = (h1 - p1).scaledBy(2)
+		## quadratic curve between h1, h2, p2
+		#y1 = h1 - h2.scaledBy(2) + p2
+		#y2 = (h2 - h1).scaledBy(2)
+		## now combine x1, x2, y1, y2 for the cubic bezier
+		#self.m_bernsteinPoints.append(y1 - x1)				# for t**3
+		#self.m_bernsteinPoints.append(x1 - x2 + y2)			# for t**2
+		#self.m_bernsteinPoints.append(x2 - p1 + h1)			# for t
+		#self.m_bernsteinPoints.append(p1)					# constant
 
 		# now calculate the normal for the osculating circles (makes only sense, if I am lying in a plane)
 		plane = Plane(p1, h1, p2)
 		if plane.containsPoint(h2):
-			self.m_normal = plane.m_normal
+			# check, if we have a turning point:
+			t1 = self.m_start
+			t2 = self.m_handleStart
+			t3 = self.m_handleStop
+			n1 = (t2 - t1).crossProduct(t3 - t1).unit()
+			#print('-----------------')
+			#n1.printComment('n1')
+			t1, t2, t3 = t2, t3, self.m_stop
+			n2 = (t2 - t1).crossProduct(t3 - t1).unit()
+			#n2.printComment('n2')
+			if n1.isSameAs(n2):
+				# ok, we have no turning point:
+				self.setStandardNormal()
 
 
-
+	def getSimpleBoundingBox(self):
+		'''
+			return a cube that simply contains my start and stop points and my handles 
+		'''
+		return Cube.makeCubeFromPoints(
+			[self.m_stop,
+			self.m_start,
+			self.m_handleStart,
+			self.m_handleStop])
+		# Min = self.m_start.min(self.m_stop)
+		# Max = self.m_start.max(self.m_stop)
+		# Min = Min.min(self.m_handleStart)
+		# Min = Min.min(self.m_handleStop)
+		# Max = Max.max(self.m_handleStart)
+		# Max = Max.max(self.m_handleStop)
+		# return Cube(Min, Max)
 
 
 	@classmethod
@@ -674,6 +748,16 @@ class ZBezier3Segment(ZPathSegment):
 		handle1 = start + tangentStart.scaledTo(dist * stiffnessStart)
 		handle2 = stop + tangentStop.scaledTo(dist * stiffnessStop)
 		return ZBezier3Segment(start, stop, handle1, handle2)
+
+
+	def isFlat(self):
+		if not super().idFlat():
+			return False
+		if not self.m_handleStart.isFlat():
+			return False
+		if not self.m_handleStop.isFlat():
+			return False
+		return True
 
 
 	def makeFlat(self):
@@ -716,10 +800,9 @@ class ZBezier3Segment(ZPathSegment):
 
 	def getOsculatingNormal(self, tangent, second):
 		'''
-			I must return the normal of the osculation point. Is only called for segments that use several planes
+			I must return the normal of the osculation point. Is only called for segments that use several planes or have a turning point
 		'''
-		#raise Exception('ZBezier3Segment::getOsculatingNormal() not yet implemented')
-		print('ZArcSegment::getOsculatingNormal: please test for correctness!')
+		#print('ZBezier3Segment::getOsculatingNormal: please test for correctness!')
 		return tangent.crossProduct(second)
 
 
@@ -797,7 +880,24 @@ class ZBezier2Segment(ZPathSegment):
 		self.m_bernsteinPoints.append((handle - p1).scaledBy(2))
 		self.m_bernsteinPoints.append(p1)
 
-		self.m_normal = Plane(p1, handle, p2).m_normal
+		#self.m_normal = Plane(p1, handle, p2).m_normal
+		self.setStandardNormal()
+
+
+	def getSimpleBoundingBox(self):
+		'''
+			return a cube that simply contains my start and stop points and my handle
+		'''
+		return Cube.makeCubeFromPoints(
+			[self.m_stop,
+			self.m_start,
+			self.m_handle])
+		# Min = Min.min(self.m_handle)
+		# Min = self.m_start.min(self.m_stop)
+		# Max = self.m_start.max(self.m_stop)
+		# Min = Min.min(self.m_handle)
+		# Max = Max.max(self.m_handle)
+		# return Cube(Min, Max)
 
 
 	def reverse(self):
@@ -815,6 +915,14 @@ class ZBezier2Segment(ZPathSegment):
 		dist = start.distanceOfPoint(stop)
 		handle = start + tangent.scaledTo(dist * stiffness)
 		return ZBezier2Segment(start, stop, handle)
+
+
+	def isFlat(self):
+		if not super().idFlat():
+			return False
+		if not self.m_handle.isFlat():
+			return False
+		return True
 
 
 	def makeFlat(self):
@@ -927,13 +1035,35 @@ class ZArcSegment(ZPathSegment):
 
 		self.m_deltaAngle = delta
 
-		normal = self.m_ellipse.getNormale()
-		if self.m_deltaAngle < 0:
-			normal = - normal
-		self.m_normal = normal
+		self.setStandardNormal()
+		#normal = self.m_ellipse.getNormale()
+		#if self.m_deltaAngle < 0:
+		#	normal = - normal
+		#self.m_normal = normal
 
 		self.selfTest()
 
+
+	# @classmethod
+	# def createZArcFromSvgObsolete(cls, rx, ry, axisAngle, p1, p2, largeArcFlag, sweepFlagClockWise):
+	# 	'''
+	# 		create a 2-d ZArcSegment from the svg path arguments
+	# 	'''
+	# 	largeArc = True if largeArcFlag else False
+	# 	sweepClockWise = True if sweepFlagClockWise else False
+
+	# 	#affine = Affine.makeRotationAffine(Line(Point(), Point(0, 0, 1)), - axisAngle)
+	# 	#p1X = affine*p1
+	# 	#p2X = affine*p2
+	# 	circle3 = cls.calculateArcEllipse(rx, ry, p1, p2, largeArc, sweepClockWise, phi=axisAngle)
+
+	# 	ret = ZArcSegment(p1, p2, circle3, largeArc, sweepFlagClockWise)
+		
+	# 	# rotate ret back to real position:
+	# 	#affInverse = affine.inverted()
+	# 	#ret.transformBy(affInverse)
+	# 	return ret
+	
 
 	@classmethod
 	def createZArcFromSvg(cls, rx, ry, axisAngle, p1, p2, largeArcFlag, sweepFlagClockWise):
@@ -954,21 +1084,36 @@ class ZArcSegment(ZPathSegment):
 		affInverse = affine.inverted()
 		ret.transformBy(affInverse)
 		return ret
+	
+
+	def getSimpleBoundingBox(self):
+			return Cube.makeCubeFromPoints([
+				self.m_start, self.m_stop, self.m_center,
+				self.m_ellipse.m_vert1, self.m_ellipse.m_vert2])
 
 
 	def containsPoint(self, point):
 		return self.m_ellipse.containsPoint(point)
+	
+
+	def isFlat(self):
+		if not super().isFlat():
+			return False
+		if not self.m_center.isFlat():
+			return False
+		return True
 
 
-	def getParameterRange(self):
-		"""
-			Return an array of 3 values for my parameter range and delta
-			Overrides same method in ZPathSegment
-		"""
-		if math.isnan(self.m_startAngle) or math.isnan(self.m_stopAngle):
-			# if they are not defined, we search over the whole ellipse
-			return [0, 360, 360]
-		return [self.m_startAngle, self.m_stopAngle, self.m_deltaAngle]
+	# def getParameterRange(self):		# also ZarcSegment uses now 0 <= t <= 1 !!!!!!!!!!!!!!!!!!!!!!!!!!
+	# 	"""
+	# 		Return an array of 3 values for my parameter range and delta
+	#  		Overrides same method in ZPathSegment
+	# 	"""
+	# 	print('also doch ==================')
+	# 	if math.isnan(self.m_startAngle) or math.isnan(self.m_stopAngle):
+	#  		# if they are not defined, we search over the whole ellipse
+	# 		return [0, 360, 360]
+	# 	return [self.m_startAngle, self.m_stopAngle, self.m_deltaAngle]
 	
 
 	def isHalfEllipse(self):
@@ -1141,16 +1286,17 @@ class ZArcSegment(ZPathSegment):
 			return the tangent direction through the point that is given by the param
 		'''
 		ret = self.m_ellipse.tangentForAngle(self.angleForParam(param))
-		if self.m_deltaAngle < 0:
-			ret = ret.scaledBy(-1)
-		return ret
+		#if self.m_deltaAngle < 0:
+		#	ret = -ret
+		return ret.scaledBy(self.m_deltaAngle)
 	
 
 	def secondDerivativeAtParam(self, param):
 		'''
 			return the second derivation direction through the point that is given by the param
 		'''
-		return self.m_ellipse.secondDerivativeForAngle(self.angleForParam(param))
+		ret = self.m_ellipse.secondDerivativeForAngle(self.angleForParam(param))
+		return ret.scaledBy(self.m_deltaAngle*self.m_deltaAngle)
 	
 
 	def pointAtAngle(self, angle):
@@ -1233,8 +1379,12 @@ class ZArcSegment(ZPathSegment):
 		Calculate the ellipse of a arc path segment from the svg arguments
 		makes only sense in the x-y-plane (2d)
 		Note that we have rotated to be axis parallel (so we reduced phi to zero outside)
+		Sorry: the case phi not-zero does not work!!
 		See http://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes F.6.5
 		'''
+
+		if abs(phi) > 0:
+			raise Exception('ZArcSement::calculateArcEllipse() does not work with phi non-zero!!')
 
 		x1 = pStart.m_x
 		y1 = pStart.m_y
@@ -1312,7 +1462,7 @@ class ZArcSegment(ZPathSegment):
 			cy = cyd + 0.5 * (y1 + y2)
 
 		# step 4 - seems obsolete, as phi is always 0
-		#theta1 = cls.vectorAngle2((1, 0), ((x1d - cxd) / rx, (y1d - cyd) / ry))
+		#theta1Degrees = cls.vectorAngle2(Point(1, 0), Point((x1d - cxd) / rx, (y1d - cyd) / ry))
 		#dtheta = cls.vectorAngle2(
 		#	((x1d - cxd) / rx, (y1d - cyd) / ry),
 		#	((-x1d - cxd) / rx, (-y1d - cyd) / ry)
@@ -1322,7 +1472,16 @@ class ZArcSegment(ZPathSegment):
 		#elif fS == 1 and dtheta < 0:
 		#	dtheta += 360
 
-		ellipse3 = Ellipse3(Point(cx, cy), diam1=Point(rx), diam2=Point(0, ry))
+		diam1 = Point(rx)
+		diam2 = Point(0, ry)
+
+		# this does not work !!
+		#if not ZGeomItem.almostZero(phi):
+		#	aff = Affine.makeRotationAffine(Line(Point(), Point(0, 0, 1)), phi)
+		#	diam1 = aff*diam1
+		#	diam2 = aff*diam2
+
+		ellipse3 = Ellipse3(Point(cx, cy), diam1=diam1, diam2=diam2)
 		return ellipse3
 	
 
@@ -1545,15 +1704,22 @@ class ZPath:
 
 
 	def getSimpleBoundingBox(self):
-		# just return the bounding box of all my segemnts' start and stop points
-		Min = Point(10000000, 10000000, 10000000)
-		Max = Point(-10000000, -10000000, -10000000)
-		for seg in self.m_segments:
-			Min = Min.min(seg.m_start)
-			Min = Min.min(seg.m_stop)
-			Max = Max.max(seg.m_start)
-			Max = Max.max(seg.m_stop)
-		return [Min, Max]
+		'''
+			just return a Cube that contains all my segemnts' start and stop points
+		'''
+		segs = self.m_segments
+		if len(segs) == 0:
+			return Cube(Point(), Point())
+		ret = segs[0].getSimpleBoundingBox()
+		for ii in range(1, len(segs)):
+			ret = ret.combinedWith(segs[ii].getSimpleBoundingBox())
+		return ret
+	
+
+	def getGreaterBoundingBox():
+		'''
+			return a rect that contains a senseful area containing most of segments
+		'''
 
 
 	def getStart(self):
@@ -1570,6 +1736,13 @@ class ZPath:
 
 	def getStop(self):
 		return self.m_segments[-1].m_stop
+	
+
+	def isFlat(self):
+		for seg in self.m_segments:
+			if not seg.isFlat():
+				return False
+		return True
 
 
 	def makeFlat(self):
@@ -1712,11 +1885,15 @@ class ZPath:
 		return ret
 
 
-	def cncFriendlySimple(self, num):
+	# was formerly named cncFriendlySimple
+	def asPolygon(self, num):
+		'''
+			return a polygon path for me, where every segment has num lines
+		'''
 		ret = ZPath()
 		for seg in self.m_segments:
-			cncList = seg.cncFriendlySimple(num)
-			for c in cncList:
+			partPath = seg.asPolygon(num)
+			for c in partPath.m_segments:
 				ret.addSegment(c)
 		return ret
 

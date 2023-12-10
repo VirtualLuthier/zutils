@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import List
 import math
 import random
+import sys
 from scipy.optimize import minimize_scalar
 #from typing_extensions import Annotated
 
@@ -403,6 +404,10 @@ class Point(ZGeomItem):
 			make myself accessible via index (length)
 		"""
 		return 3
+	
+
+	def isFlat(self):
+		return self.m_z == 0
 
 
 	def flattened(self) -> Point:
@@ -455,6 +460,26 @@ class Point(ZGeomItem):
 		cos = u1 * u2
 		ret = math.degrees(math.acos(cos))
 
+		return ret
+	
+
+	def vectorAngle2To(self, other):
+		'''
+			return the angle (in degrees) that I have to be rotated to get the direction of the other. Returns a number in [-180, 180]. 
+			Positive values mean counterclockwise, -180 instead of 180 is possible 180
+		'''
+		d = self.length() * other.length()
+		if d == 0:
+			return 0
+		c = (self[0] * other[0] + self[1] * other[1]) / d
+		if c < -1:
+			c = -1
+		elif c > 1:
+			c = 1
+		s = self[0] * other[1] - self[1] * other[0]
+		ret = - math.degrees(math.copysign(math.acos(c), s))
+		if not self.s_originIsTopLeft:
+			ret *= -1
 		return ret
 
 
@@ -558,6 +583,23 @@ class Cube(ZGeomItem):
 	@classmethod
 	def makeCube(cls, origin, width, height, zDiff=0) -> Cube:
 		return Cube(origin, origin + Point(width, height, zDiff))
+	
+
+	@classmethod
+	def makeCubeFromPoints(cls, pointsList):
+		Min = pointsList[0]
+		Max = pointsList[0]
+		for point in pointsList:
+			Min = point.min(Min)
+			Max = point.max(Max)
+		return Cube(Min, Max)
+	
+
+	def combinedWith(self, otherCube):
+		'''
+			return a cube that contains me and otherCube
+		'''
+		return Cube(min(self.m_origin, otherCube.m_origin), self.m_corner.max(otherCube.m_corner))
 
 
 	def containsPoint(self, point) -> bool:
@@ -586,7 +628,6 @@ class Cube(ZGeomItem):
 
 
 	def rounded(self, num=2):
-
 		return Cube(self.m_origin.rounded(num), self.m_corner.rounded(num))
 
 
@@ -1018,20 +1059,11 @@ class Ellipse3(ZGeomItem):
 	
 
 	def secondDerivativeForAngle(self, degrees):
-		# this is simply the derivative of the tangent formula with respect to angle
+		'''
+			this is simply the derivative of the tangent formula with respect to angle
+		'''
 		angle = math.radians(degrees)
 		return -self.m_diam1.scaledBy(math.cos(angle)) - self.m_diam2.scaledBy(math.sin(angle))
-
-
-	#def provideCachedPoints(self):
-	#	if self.m_cachedPoints is not None:
-	#		return
-	#	num = 360
-	#	step = 360.0 / num
-	#	cache = [None] * num
-	#	for ii in range(num):
-	#		cache[ii] = self.pointForParam(step * ii)
-	#	self.m_cachedPoints = cache
 
 
 	def angleForPoint(self, point):
